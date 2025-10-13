@@ -475,8 +475,11 @@ if __name__ == '__main__':
     log(f"Deep Research Loaded: {'True' if DEEP_RESEARCH else 'False'}")
     log("="*60)
     
+    # Get port from environment (Railway sets this)
+    port = int(os.environ.get('PORT', config.FLASK_PORT))
+    
     app.run(
         host='0.0.0.0',
-        port=config.FLASK_PORT,
+        port=port,
         debug=config.FLASK_DEBUG
     )
