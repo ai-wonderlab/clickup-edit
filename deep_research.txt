@@ -1,0 +1,828 @@
+The Ultimate Practitioner's Guide to
+Bytedance Seedream V4: Text-to-Image
+Generation and Editing
+
+Core Model Architecture and Technical Capabilities
+An expert-level application of any generative model requires a foundational understanding of
+its underlying architecture. Treating the model as a black box leads to inconsistent results and
+an inability to troubleshoot effectively. Seedream V4 is not an incremental update; its
+architecture represents a significant shift in design philosophy, directly enabling its
+state-of-the-art capabilities.
+
+The Unified Generation and Editing Architecture
+The defining characteristic of Seedream V4 is its single, unified architecture that natively
+integrates text-to-image generation and instruction-based image editing.1 This is a departure
+from previous paradigms where generation and editing were handled by separate models,
+such as Seedream 3.0 for generation and SeedEdit 3.0 for editing.3 The model's core likely
+consists of advanced transformer-based encoders for deep semantic and contextual
+understanding of prompts, coupled with a diffusion process for high-fidelity pixel-level
+synthesis.4 This architecture is built upon a lineage of technical advancements, including the
+integration of a powerful, self-developed bilingual Large Language Model (LLM) as a text
+encoder, which allows the model to learn native knowledge directly from massive datasets.6
+This unified design is the direct technical enabler of the model's widely reported proficiency in
+"high feature retention" and "reference consistency".8 In traditional image-to-image
+workflows, an edit is often treated as a new generation that is heavily guided by an initial
+image, which can lead to unintended alterations in unedited regions. Seedream V4's
+architecture, however, appears to treat an edit as a semantic manipulation within a continuous
+latent space. This allows it to execute complex instructions, such as changing the text on a
+poster while precisely preserving the original font, color, and alignment, or modifying a
+
+subject's clothing without altering their facial identity or the background lighting.1 This
+capability for deterministic, instruction-based editing is a cornerstone of its practical utility.
+
+Core Technical Strengths
+The model's architecture gives rise to several key technical strengths that differentiate it from
+competitors and predecessors.
+●​ High-Resolution Native Generation: Seedream V4 natively supports output resolutions
+up to 4K (4096x4096 pixels).1 This is not a post-processing upscale; the model was
+trained using a multi-resolution hybrid strategy, allowing the core diffusion process to
+operate effectively at various resolutions, including direct 2K output without a separate
+refiner module.10 This ensures maximum fidelity and avoids artifacts common to external
+upscaling methods.
+●​ Knowledge-Driven Generation: The model demonstrates a powerful capacity for tasks
+that require reasoning and the visualization of structured information. It can generate
+accurate educational diagrams, historical timelines, comparison charts, and even render
+and solve mathematical equations on a virtual blackboard.1 This advanced capability is a
+direct result of its sophisticated LLM-based text encoder, which provides a deep
+understanding of concepts beyond simple object recognition.6
+●​ High-Fidelity Text Rendering: Seedream V4 shows remarkable proficiency in
+typography, a notorious challenge for generative models. It can render sharp, legible text,
+including small fonts and multi-line layouts, making it a viable tool for commercial-grade
+graphic design, such as posters and infographics.10
+These strengths signal a significant evolution in the purpose of image generation models.
+While many contemporaries focus primarily on aesthetic appeal or photorealism, Seedream
+V4 is positioned as a functional, utility-driven visual communication tool. Its capabilities in
+rendering text and structured data make it highly applicable to production workflows in
+graphic design, marketing, and education. To leverage the model effectively, an operator
+should approach prompting with the precision of a design brief rather than the abstraction of
+a purely artistic command.
+
+Full Analysis of Settings and Parameters
+Mastery of Seedream V4 requires a comprehensive understanding of every available
+
+parameter across the various APIs that provide access to the model. The following table
+consolidates this fragmented information into a single, canonical reference for expert users.
+
+Parameter
+Name
+
+Alternate
+Names
+
+Data Type &
+Range
+
+Default Value
+
+Practical Effect
+& Expert
+Guidance
+
+prompt
+
+-
+
+string
+
+null
+
+(Required)
+The primary
+text input for
+generation or
+editing. For
+generation,
+use
+descriptive,
+scene-directin
+g language.
+For editing,
+use a clear
+[Action] +
+[Object] +
+structure.
+
+image_urls
+
+image_input
+
+list<string>
+
+``
+
+A list of URLs
+for reference
+images. Used
+for
+image-to-imag
+e tasks, style
+transfer, and
+multi-referenc
+e fusion. The
+number of
+allowed
+images varies
+by provider
+(e.g., up to 3
+on Segmind,
+up to 10 on
+Replicate).9
+
+image_size
+
+size
+
+enum or object
+
+Varies by
+provider (e.g.,
+'square_hd')
+
+Sets the
+output
+resolution. Can
+be a preset
+enum ('1K', '2K',
+'4K',
+'square_hd') or
+a custom
+object
+{"width": W,
+"height": H}.9
+
+width
+
+-
+
+integer
+[1024-4096]
+
+1024
+
+Specifies the
+width for a
+custom
+image_size.
+Must be used
+with height.
+
+height
+
+-
+
+integer
+[1024-4096]
+
+1024
+
+Specifies the
+height for a
+custom
+image_size.
+Must be used
+with width.
+
+aspect_ratio
+
+-
+
+string
+
+'1:1'
+
+Sets the
+aspect ratio
+from presets
+like '1:1', '16:9',
+'9:16', '4:3',
+'3:4', '21:9'.
+Overridden by
+custom
+width/height.9
+
+num_images
+
+-
+
+integer [1-4]
+
+1
+
+The number of
+separate,
+independent
+generations to
+run with the
+
+same prompt.13
+max_images
+
+-
+
+integer [1-15]
+
+1
+
+Used with
+sequential_ima
+ge_generation.
+The model
+may return up
+to this many
+related images
+from a single
+prompt. The
+total number
+of images
+generated is
+between
+num_images
+and
+max_images *
+num_images.9
+
+sequential_ima
+ge_generation
+
+-
+
+string or
+boolean
+
+disabled or
+false
+
+Enables a
+mode for
+generating a
+coherent
+series of
+images (e.g.,
+storyboards,
+character
+sheets). Set to
+'auto' or true
+to activate.9
+
+seed
+
+-
+
+integer
+
+Random
+
+A specific
+integer to
+ensure
+reproducible
+outputs.
+Essential for
+iterative
+refinement and
+consistent
+character
+
+generation.13
+strength
+
+Processing
+Intensity
+
+float [0.0-1.0]
+or [1.0-10.0]
+
+Varies
+
+(Editing Only)
+Controls how
+much the
+prompt alters
+the image_urls.
+Low values
+yield subtle
+changes; high
+values create
+dramatic
+transformation
+s. Note the
+range varies:
+BytePlus uses
+0-1 4, while
+FluxPro.ai uses
+1-10.16
+
+enable_safety_
+checker
+
+-
+
+boolean
+
+true
+
+Toggles the
+built-in safety
+filter. Setting to
+false may allow
+for generation
+of more
+sensitive
+content,
+depending on
+the API
+provider's
+policy.13
+
+response_form
+at
+
+enable_base64
+_output
+
+string or
+boolean
+
+'url' or false
+
+Determines
+the output
+format. 'url'
+provides a link
+to the
+generated
+image, while
+'base64' or
+true returns
+
+the image data
+directly as a
+Base64
+encoded
+string.5
+sync_mode
+
+enable_sync_
+mode
+
+boolean
+
+false
+
+If true, the API
+request will
+block and wait
+for the image
+to be fully
+generated
+before
+returning a
+response. This
+simplifies
+workflows by
+avoiding the
+need to poll
+for results, but
+increases
+latency.8
+
+Parameter Application and Workflow
+●​ Resolution and Aspect Ratio: Because Seedream V4 is trained with a multi-resolution
+strategy, it excels at generating directly at high resolutions. The expert workflow should
+target the final desired resolution (e.g., 2K or 4K) from the initial prompt rather than
+generating a small image and upscaling it later. This leverages the model's native
+capabilities and produces superior detail and fidelity.9 Use​
+image_size presets for speed and custom width/height for specific requirements like print
+or banner ads.
+●​ Batch and Sequential Generation: To explore variations of a single concept, use
+num_images. For creating a narrative or a set of thematically linked visuals, the
+sequential_image_generation parameter is the correct tool. When enabled, a prompt like
+"a character sheet showing front, side, and back views" will produce a coherent series of
+images in a single run.9
+●​ Editing Control (strength): This is the most critical parameter for image-to-image tasks.
+A strength value of 0.1-0.3 is ideal for subtle corrections like minor color adjustments. A
+mid-range value of 0.4-0.7 works well for more significant changes like altering clothing
+
+or adding objects. High values (0.8+) are best for complete stylistic transformations
+where only the basic composition of the original image is retained.4
+
+Advanced Prompting Methodologies
+Beyond parameter tuning, the structure and vocabulary of the prompt are the primary levers
+for controlling Seedream V4. The model's advanced LLM text encoder allows for an
+unprecedented level of nuance and precision in natural language instructions.
+
+Optimal Prompt Structure
+Adhering to a structured prompt format dramatically improves consistency and adherence.
+The optimal structures vary by task:
+●​ For Text-to-Image Generation: The most effective formula is a layered, descriptive
+approach: +.18 This method directs the model like a scene director rather than simply
+providing a caption. Start with the core content, then layer on stylistic and technical
+details.
+●​ For Image-to-Image Editing: Precision is key. The recommended structure is a direct
+command: [Action] + [Object] +.8 This allows for highly specific modifications, such as
+"Change the woman's dress to a red silk gown" or "Remove the car parked on the left."
+Explicitly stating what should remain unchanged (e.g., "keep the same font and
+alignment") further enhances control.12
+●​ For Text Rendering: To maximize the accuracy of text within an image, enclose the
+desired text in double quotation marks. For example: A concert poster with the title "THE
+SOUND OF FRACTALS" at the top.19
+
+Key-Term Lexicon
+The model responds powerfully to specific technical and artistic terminology. Incorporating
+these keywords provides fine-grained control over the final output.
+
+Camera and Composition Control
+
+Category
+
+Keywords and Phrases
+
+Shot Type
+
+close-up portrait, head and torso portrait,
+full-body studio shot, wide-angle
+perspective, panoramic shot, fish-eye
+portrait, slightly elevated 45-degree shot 12
+
+Lens Effects
+
+85mm portrait lens, soft blurred
+background (bokeh), shallow depth of
+field, cinematic depth of field, sharp focus
+21
+
+Composition
+
+symmetrical composition, minimalist
+composition, significant negative space,
+centered subject, bottom-right of the
+frame, headline at top 12
+
+Lighting and Atmosphere Control
+
+Category
+
+Keywords and Phrases
+
+Time of Day
+
+golden hour light, dusk, morning, nighttime
+12
+
+Light Quality
+
+soft, diffused lighting, harsh shadows, high
+contrast lighting, volumetric lighting,
+chiaroscuro, studio-lit, three-point softbox
+setup 12
+
+Atmosphere
+
+serene and masterful mood, soft dreamy
+atmosphere, dramatic light and shadow
+
+interplay, warm and lived-in atmosphere,
+somber mood 21
+Light Effects
+
+neon signs reflecting on wet pavement,
+aurora borealis glowing, shattered glass
+sphere refracting rainbow light, glistening,
+glowing 12
+
+Artistic and Stylistic Modifiers
+
+Category
+
+Keywords and Phrases
+
+Painting Styles
+
+Impressionist oil painting, in the style of
+Monet, Baroque, noir art style, ink wash
+painting, watercolor 12
+
+Digital/Modern
+
+3D cartoon style, pixel art, cyberpunk,
+classic mecha anime style, Ghibli style,
+Vogue fashion editorial aesthetic 12
+
+Physical Media
+
+clay style, paper-cutting style, wool felt
+style, gritty film photography, Portra 400 +
+Cinestill 800 film look 18
+
+Realism
+
+ultra-realistic, photorealistic,
+hyper-realistic, cinematic style,
+high-fidelity commercial quality 12
+
+Character Expression and Detail Control
+
+Category
+
+Keywords and Phrases
+
+Facial Expression
+
+gentle smile, knowing smile, warm smile,
+
+determined face, happily with his eyes
+open 18
+Mood
+
+serene and masterful, confident smile,
+gentle, angry 20
+
+Physical Details
+
+deep, sun-etched wrinkles, delicate skin
+texture, flowing hair, emrald eyes, bronde
+ombré hair, tattoos on her right arm 21
+
+Pose/Action
+
+carefully inspecting, holding an umbrella,
+leaning on the hood of a car, making a
+greeting gesture, sprinting on the field 18
+
+Advanced Control Techniques
+●​ Multi-Reference Fusion: This is one of Seedream V4's most powerful features, enabling
+the combination of elements from multiple source images into a single, cohesive output.
+The key to success is a highly structured prompt that assigns a specific role to each
+reference image. The optimal syntax is: Take the [element from Image 1], place them in
+the [environment of Image 2], and render it all in the [style of Image 3].18 This technique
+leverages the model's deep reasoning to deconstruct and reconstruct visual concepts
+according to user instruction.
+●​ Sequential Generation for Storytelling: By setting sequential_image_generation:
+"auto", users can create narrative sequences or character studies. This requires a prompt
+that implies a sequence and provides distinct instructions for each frame. The
+recommended structure is: Generate a set of [Number] consecutive illustrations, in a
+style, personifying. 1st:. 2nd: [Progression of Action 2]. 3rd:....9 This is ideal for creating
+comic panels, storyboards, or product visualization series.
+●​ Implicit Negative Prompting: A thorough analysis of all available API documentation
+reveals the absence of a formal negative_prompt parameter, a common feature in other
+diffusion models.13 This is a deliberate design choice. The model's reliance on a powerful
+LLM for prompt interpretation shifts the control paradigm from exclusion (telling the
+model what​
+not to do) to precise inclusion (telling the model exactly what to do). Instead of using a
+negative prompt like ugly, deformed hands, the expert Seedream V4 workflow is to be
+hyper-specific in the positive prompt: a photorealistic portrait of a beautiful woman with
+symmetrical facial features, clear skin, and anatomically correct hands with five fingers.
+This method of "positive specification" requires unlearning the habit of relying on
+
+negative prompts and instead mastering descriptive and precise language.
+
+Expert Best Practices, Limitations, and Workflows
+Synthesizing the model's capabilities, parameters, and prompting methodologies allows for
+the development of reproducible, high-performance workflows and a clear understanding of
+the model's operational boundaries.
+
+High-Performance Examples
+The following five examples demonstrate state-of-the-art results by combining optimal
+prompting with precise parameter settings.
+1.​ Commercial Poster with Typography​
+This example showcases the model's exceptional text rendering and compositional
+understanding, making it suitable for professional graphic design.
+○​ Prompt: Concert poster. Title: "THE SOUND OF FRACTALS". Background: a shattered
+glass sphere refracting rainbow light into geometric shards. Subtitle: "Live at the
+Crystal Hall · 05.11.2026". Bold white lettering bending along the curve of the sphere.
+Dark cinematic tones, high-fidelity commercial quality.
+○​ Settings:
+■​ image_size: {"width": 2048, "height": 3072}
+■​ aspect_ratio: '2:3'
+■​ seed: 1337
+○​ Analysis: The prompt clearly defines the type of output ("Concert poster"), uses
+quotation marks for the text elements, and specifies layout details ("bending along
+the curve"). This structured approach, combined with a high-resolution portrait
+aspect ratio, leverages the model's core strengths in typography and design.12
+2.​ Multi-Reference Character Fusion​
+This workflow demonstrates the model's advanced reasoning by combining style,
+character, and environment from three separate images.
+○​ Prompt: Create a single, hyper-realistic, high-fashion street style photograph. Take
+the character from Image 1, dress them in the outfit and accessories from Image 2,
+and place them into the environment of Image 3. The lighting should match the
+environment of Image 3.
+○​ Settings:
+■​ image_urls: ``
+
+■​ image_size: '2K'
+■​ aspect_ratio: '9:16'
+■​ strength: 0.85
+○​ Analysis: This prompt uses the explicit Take the [X from Image 1]... structure, which
+is critical for guiding the fusion process. A high strength value is necessary to allow
+the model to significantly rework the base images into a new, cohesive whole.18
+3.​ Sequential Character Sheet​
+This example uses sequential generation to produce a consistent character reference
+sheet, a common task in concept art and game development.
+○​ Prompt: ultra-photorealistic character sheet of the woman in the reference image.
+Generate three full-body studio shots arranged side-by-side: a front portrait, a side
+profile portrait, and a back portrait. She must be the exact same person in all three
+photos, wearing the exact same clothing and hairstyle. She should be standing in a
+neutral pose against a plain, neutral gray studio backdrop. Use even, soft studio
+lighting to eliminate harsh shadows.
+○​ Settings:
+■​ image_urls: ``
+■​ sequential_image_generation: "auto"
+■​ max_images: 3
+■​ image_size: {"width": 3072, "height": 1024}
+○​ Analysis: The prompt explicitly requests a set of images and details the
+requirements for consistency ("exact same person," "exact same clothing"). Enabling
+sequential_image_generation instructs the model to treat this as a single, multi-part
+task, greatly improving the chances of maintaining the character's identity across all
+three outputs.14
+4.​ High-Fidelity Photorealism​
+This prompt leverages technical photography terms to achieve a hyper-realistic and
+art-directed portrait, demonstrating the model's nuanced understanding of specialized
+vocabularies.
+○​ Prompt: A photorealistic close-up portrait of an elderly Japanese ceramicist with
+deep, sun-etched wrinkles and a warm, knowing smile. The setting is his rustic,
+sun-drenched workshop. The scene is illuminated by soft, golden hour light
+streaming through a window, highlighting the fine texture of the clay. Captured with
+an 85mm portrait lens, resulting in a soft, blurred background (bokeh). The overall
+mood is serene and masterful.
+○​ Settings:
+■​ image_size: '4K'
+■​ aspect_ratio: '4:3'
+■​ seed: 80085
+○​ Analysis: The prompt is rich with sensory and technical details: "sun-etched
+wrinkles," "golden hour light," "85mm portrait lens," and "bokeh." This level of
+specificity leaves little room for ambiguity and guides the model toward a
+
+professional photographic aesthetic rather than a generic "realistic" image.12
+Generating directly at 4K ensures all fine details are captured.
+5.​ Knowledge-Driven Diagram​
+This example highlights the model's ability to generate structured, informational content,
+moving beyond purely creative tasks.
+○​ Prompt: Draw a timeline of Chinese history from the Qin Dynasty to the Qing
+Dynasty. Mark the Qin, Han, Tang, Song, Yuan, Ming, and Qing dynasties in a clear
+chronological order. Use a minimalist infographic style with simple icons representing
+each dynasty.
+○​ Settings:
+■​ image_size: {"width": 4096, "height": 1536}
+■​ aspect_ratio: '21:9' (approximated)
+○​ Analysis: This prompt tests the model's internal knowledge base and its ability to
+structure that information visually. The request is direct and factual. The wide aspect
+ratio is suitable for a timeline format. This demonstrates the model's utility for
+educational and professional content creation.1
+
+Common Pitfalls and Avoidance Strategies
+●​ Pitfall: Vague or Ambiguous Prompts. Using short, undescriptive prompts like "a girl" or
+"a car" cedes creative control to the model, resulting in generic and often flawed
+outputs.18
+○​ Avoidance: Always use a structured, descriptive prompt. Specify the subject, action,
+setting, style, lighting, and composition to guide the generation process precisely.
+●​ Pitfall: Overloading a Single Prompt. Attempting to generate a highly complex scene
+with multiple, uniquely described characters interacting in a detailed environment can
+overwhelm the model, leading to anatomical distortions and compositional failures.28
+○​ Avoidance: Employ an iterative workflow. Generate the background environment
+first. Then, use the editing function to add characters one by one. This breaks the
+complex task into manageable steps.
+●​ Pitfall: Ineffective Reference Images. Providing low-quality, poorly composed, or
+conceptually contradictory reference images will confuse the model and lead to a messy,
+blended output.29
+○​ Avoidance: Use a small number (1-3) of high-quality, high-resolution reference
+images that clearly and cohesively represent the desired style, character, or object.
+●​ Pitfall: Unrealistic Editing Expectations. The model can struggle to preserve or modify
+extremely fine details, such as small text on product packaging or intricate patterns,
+during an edit. The edit may "krangl" or distort these elements.30
+○​ Avoidance: For mission-critical fine details, perform these edits in a dedicated
+
+graphics editor after the main generation. Alternatively, be prepared to iterate
+multiple times with highly focused prompts and a low strength value to nudge the
+model toward the correct result.
+
+Known Limitations and Workarounds
+●​ Limitation: Complex Action Scenes. The model has difficulty generating complex,
+dynamic scenes involving multiple subjects in motion, such as fight scenes or sports. The
+results often lack anatomical coherence and logical interaction.28
+○​ Workaround: This is a significant challenge with no perfect solution. The most
+effective approach is to generate subjects in simpler, static poses and then
+composite them into a scene using external editing software. Providing a reference
+image of the desired action can also help guide the generation, but results may vary.
+●​ Limitation: Abstract Spatial and Logical Reasoning. Seedream V4 cannot perform
+true logical or spatial reasoning. It can reproduce the aesthetic of a map, chart, or
+diagram but does not understand the underlying data or logic. A generated map will have
+invented geography, and a generated chart will have nonsensical data.31
+○​ Workaround: Use the model to create the stylistic components and background for
+your diagram (e.g., a vintage paper texture, a futuristic HUD layout, chart axes, and
+legends). Then, import this visual "scaffolding" into a design tool and overlay the
+accurate data and labels manually.
+●​ Limitation: Inconsistent Anatomy and Details. Despite its overall high fidelity, the
+model is still susceptible to common AI generation artifacts, especially in complex
+scenes. This includes distorted faces on background characters, malformed hands, and
+illogical object fusion.30
+○​ Workaround: Leverage the model's own powerful editing capabilities. After an initial
+generation, use the output as a reference image for a new editing task. Use a precise
+prompt like, "Fix the hands of the person on the left to be anatomically correct," or,
+"Correct the distorted facial features of the man in the background." This iterative
+refinement process is a core expert workflow.
+●​ Limitation: Content Filtering. The model has strict content filters that block prompts
+containing sensitive or explicit language.17
+○​ Workaround: Rephrase prompts using more clinical, artistic, or abstract terminology
+(e.g., "anatomical study," "boudoir photography," "art-nude"). For users with API
+access, some providers offer the ability to disable the safety filter by setting
+enable_safety_checker: false, which provides the highest degree of control over the
+output.17
+
+Works cited
+
+1.​ Seedream 4.0 - ByteDance Seed, accessed September 15, 2025,
+
+https://seed.bytedance.com/en/seedream4_0
+2.​ ByteDance Seedream 4 | Text to Image - Replicate, accessed September 15, 2025,
+https://replicate.com/bytedance/seedream-4
+3.​ TikTok parent Bytedance launches new AI tool Seedream 4.0 to rival Google's
+Nano Banana - The Times of India, accessed September 15, 2025,
+https://timesofindia.indiatimes.com/technology/tech-news/tiktok-parent-bytedan
+ce-launches-new-ai-tool-to-rival-googles-nano-banana/articleshow/123833693.c
+ms
+4.​ What's Seedream 4.0 and How Do You Access Its API? - Apidog, accessed
+September 15, 2025, https://apidog.com/blog/seedream-4-0-how-access-its-api/
+5.​ Seedream 4.0 API: Architecture, Benchmark performance & Access - CometAPI All AI Models in One API, accessed September 15, 2025,
+https://www.cometapi.com/seedream-4-0-api-architecture-benchmark-access/
+6.​ (PDF) Seedream 2.0: A Native Chinese-English Bilingual Image Generation
+Foundation Model - ResearchGate, accessed September 15, 2025,
+https://www.researchgate.net/publication/389748435_Seedream_20_A_Native_C
+hinese-English_Bilingual_Image_Generation_Foundation_Model
+7.​ Seedream 2.0: A Native Chinese-English Bilingual Image Generation Foundation
+Model, accessed September 15, 2025, https://arxiv.org/html/2503.07703v1
+8.​ Seedream 4.0 by ByteDance - WaveSpeed AI, accessed September 15, 2025,
+https://wavespeed.ai/models/bytedance/seedream-v4
+9.​ Seedream 4.0 Serverless API - Segmind, accessed September 15, 2025,
+https://www.segmind.com/models/seedream-4
+10.​Seedream 3.0 Text-to-Image Model Technical Report Released - ByteDance
+Seed, accessed September 15, 2025,
+https://seed.bytedance.com/blog/seedream-3-0-text-to-image-model-technical
+-report-released
+11.​ Seedream 4.0 - RunComfy, accessed September 15, 2025,
+https://www.runcomfy.com/playground/bytedance/seedream-4-0
+12.​Full Guide to Seedream 4.0: ByteDance's HD AI for Posters, Infographics & More |
+getimg.ai, accessed September 15, 2025,
+https://getimg.ai/blog/guide-to-bytedance-seedream-4-ai-image-model
+13.​Bytedance | Image to Image | fal.ai, accessed September 15, 2025,
+https://fal.ai/models/fal-ai/bytedance/seedream/v4/edit
+14.​seedream-4 | AI Model Details - AIModels.fyi, accessed September 15, 2025,
+https://www.aimodels.fyi/models/replicate/seedream-4-bytedance
+15.​Seedream 4.0 API - CometAPI - All AI Models in One API, accessed September 15,
+2025, https://www.cometapi.com/seedream-4-0-api/
+16.​Seedream 4.0 AI - Free Advanced Image Editor | Batch Processing Tool by
+ByteDance, accessed September 15, 2025,
+https://www.fluxpro.ai/im/seedream/seedream-4
+17.​SeeDream 4 vs Nano Banana : r/Bard - Reddit, accessed September 15, 2025,
+https://www.reddit.com/r/Bard/comments/1ng3vft/seedream_4_vs_nano_banana/
+18.​Unlock Seedream 4.0 Prompts Secrets:From Amateur Images to Professional
+
+Masterpieces, accessed September 15, 2025,
+https://wavespeed.ai/blog/posts/Unlock-Seedream-4.0-Prompts-Secrets:From-A
+mateur-Images-to-Professional-Masterpieces
+19.​TikTok parent ByteDance to take on Google DeepMind's 'Nano Banana' with
+Seedream 4.0 – All you need to know | Mint, accessed September 15, 2025,
+https://www.livemint.com/technology/tiktok-parent-bytedance-to-take-on-googl
+e-deepmind-s-nano-banana-with-seedream-4-0-all-you-need-to-know-117576
+39116477.html
+20.​Master Your Video Creations with Seedance 1.0 Lite: A Comprehensive Prompt
+Guide, accessed September 15, 2025,
+https://aimlapi.com/blog/master-your-video-creations-with-seedance-1-0-lite-acomprehensive-prompt-guide
+21.​Official Nano-Banana Prompting Guide with Test Case Comparisons - Generative
+AI, accessed September 15, 2025,
+https://generativeai.pub/official-nano-banana-prompting-guide-with-test-case-c
+omparisons-93d15d27de4d
+22.​Best Seedream 4 Prompts - PromptHero, accessed September 15, 2025,
+https://prompthero.com/seedream-prompts
+23.​About that huge long negative prompt list... : r/StableDiffusion - Reddit, accessed
+September 15, 2025,
+https://www.reddit.com/r/StableDiffusion/comments/xwu5od/about_that_huge_lo
+ng_negative_prompt_list/
+24.​Seedream 4.0 vs Nano Banana: Completely Wins on 6 Comparisons | by 302.AI Medium, accessed September 15, 2025,
+https://medium.com/@302.AI/seedream-4-0-vs-nano-banana-completely-winson-6-comparisons-eb2e96482d79
+25.​Seedream 4.0：Next-Generation Multi-Modal Image Model - WaveSpeedAI Blog,
+accessed September 15, 2025, https://wavespeed.ai/blog/posts/Seedream-4.0
+26.​Free Seedream 4.0 AI Image Generator by Bytedance - Flux AI, accessed
+September 15, 2025, https://flux-ai.io/seedream-4-0/
+27.​bytedance/seedream-4 | Get started - Replicate, accessed September 15, 2025,
+https://replicate.com/bytedance/seedream-4/api
+28.​SeeDream 4 turns learned noise into something we mistake for truth : r/singularity
+- Reddit, accessed September 15, 2025,
+https://www.reddit.com/r/singularity/comments/1nddcnv/seedream_4_turns_learn
+ed_noise_into_something_we/
+29.​DeeVid AI Image Generator Update: Now With Nano Banana + Seedream 4.0,
+accessed September 15, 2025,
+https://www.barchart.com/story/news/34783504/deevid-ai-image-generator-upd
+ate-now-with-nano-banana-seedream-40
+30.​ByteDance claims Seedream 4.0 beats Google's "nano banana" on aesthetics and
+alignment : r/singularity - Reddit, accessed September 15, 2025,
+https://www.reddit.com/r/singularity/comments/1ndkl18/bytedance_claims_seedre
+am_40_beats_googles_nano/
+31.​Seedream 4.0 still sucks at maps : r/singularity - Reddit, accessed September 15,
+
+2025,
+https://www.reddit.com/r/singularity/comments/1nd7dnm/seedream_40_still_suck
+s_at_maps/
+32.​Seedream 4 is mind-blowingly good : r/singularity - Reddit, accessed September
+15, 2025,
+https://www.reddit.com/r/singularity/comments/1ncn3qy/seedream_4_is_mindblo
+wingly_good/
