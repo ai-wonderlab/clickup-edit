@@ -179,17 +179,21 @@ def edit_image_with_seedream(image_bytes, prompt):
             "Content-Type": "application/json"
         }
         
+        # CORRECTED: SeaDream v4 Edit API format
         payload = {
-            "image": image_base64,
+            "images": [image_base64],  # ← Changed from "image" to "images" array
             "prompt": prompt,
-            "negative_prompt": "low quality, blurry, distorted, ugly, deformed",
-            "num_inference_steps": 30,
-            "guidance_scale": 7.5
+            "size": "2048*2048",       # ← Added size parameter
+            "enable_sync_mode": False,
+            "enable_base64_output": False
         }
         
         log(f"Sending image to SeaDream v4 for editing...")
+        log(f"Prompt: {prompt[:100]}...")  # Log first 100 chars of prompt
+        
+        # CORRECTED: Use the proper SeaDream v4 Edit endpoint
         response = requests.post(
-            config.WAVESPEED_API_URL,
+            "https://api.wavespeed.ai/api/v3/bytedance/seedream-v4/edit",
             headers=headers,
             json=payload,
             timeout=120

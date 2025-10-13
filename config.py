@@ -19,7 +19,7 @@ class Config:
     
     # WaveSpeed.ai Configuration
     WAVESPEED_API_KEY = os.getenv('WAVESPEED_API_KEY')
-    WAVESPEED_API_URL = "https://api.wavespeed.ai/api/v3/bytedance/seedream-v4"
+    WAVESPEED_API_URL = "https://api.wavespeed.ai/api/v3/bytedance/seedream-v4/edit"
     
     # Flask Configuration
     FLASK_PORT = int(os.getenv('FLASK_PORT', 5000))
