@@ -1,2 +1,2 @@
-web: gunicorn app:app --bind 0.0.0.0:$PORT
-
+web: gunicorn app:app --timeout 120 --workers 2
+worker: celery -A tasks worker --loglevel=info --concurrency=3
