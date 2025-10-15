@@ -10,6 +10,8 @@ import time
 import logging
 from config import config
 from concurrent.futures import ThreadPoolExecutor, as_completed
+import tempfile
+import os
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -63,7 +65,6 @@ def download_file(file_url):
 def format_prompt_with_gemini(user_description):
     """Format user description into optimized prompt using Gemini"""
     try:
-        # Load prompts
         try:
             with open('activation_guide.txt', 'r') as f:
                 activation_guide = f.read()
@@ -125,60 +126,99 @@ OUTPUT (optimized SeaDream v4 prompt only):"""
         log(f"Error with Gemini: {e}", "ERROR")
         return user_description
 
-def create_image_edit_job(image_base64, prompt, width, height, endpoint):
-    """Create image editing job - supports multiple endpoints"""
+def create_image_edit_job(image_url, prompt, width, height, endpoint, model_name):
+    """Create image editing job - supports all 6 models with correct payloads"""
     try:
         headers = {
             'Authorization': f'Bearer {config.WAVESPEED_API_KEY}',
             'Content-Type': 'application/json'
         }
         
-        # Different payload structure for different endpoints
+        # Build payload based on model
         if 'seedream' in endpoint:
             payload = {
-                'images': [image_base64],
+                'images': [image_url],
                 'prompt': prompt,
                 'size': f'{width}*{height}',
                 'enable_sync_mode': False,
                 'enable_base64_output': False
             }
-        else:
+        elif 'qwen-image/edit-plus' in endpoint:
             payload = {
-                'image': image_base64,
+                'enable_base64_output': False,
+                'enable_sync_mode': False,
+                'images': [image_url],
+                'output_format': 'png',
                 'prompt': prompt,
-                'width': width,
-                'height': height
+                'seed': -1,
+                'size': f'{width}*{height}'
+            }
+        elif 'wan-2.5' in endpoint:
+            payload = {
+                'images': [image_url],
+                'prompt': prompt,
+                'seed': -1,
+                'size': f'{width}*{height}'
+            }
+        elif 'qwen-image/edit-lora' in endpoint:
+            payload = {
+                'enable_base64_output': False,
+                'enable_sync_mode': False,
+                'image': image_url,
+                'loras': [],
+                'output_format': 'png',
+                'prompt': prompt,
+                'seed': -1
+            }
+        elif 'nano-banana' in endpoint:
+            # Nano Banana uses aspect_ratio, not size
+            aspect = "1:1" if width == height else "9:16"
+            payload = {
+                'aspect_ratio': aspect,
+                'enable_base64_output': False,
+                'enable_sync_mode': False,
+                'images': [image_url],
+                'output_format': 'png',
+                'prompt': prompt
+            }
+        else:  # qwen-image/edit (base)
+            payload = {
+                'enable_base64_output': False,
+                'enable_sync_mode': False,
+                'image': image_url,
+                'output_format': 'png',
+                'prompt': prompt,
+                'seed': -1
             }
         
         response = requests.post(endpoint, headers=headers, json=payload, timeout=30)
         response.raise_for_status()
         data = response.json()
         
-        # Extract job ID based on response structure
-        if 'data' in data and 'id' in data['data']:
-            return data['data']['id'], data['data'].get('urls', {}).get('get')
-        elif 'job_id' in data:
-            return data['job_id'], None
+        # Extract job ID
+        if 'data' in data:
+            return data['data'].get('id'), data['data'].get('urls', {}).get('get')
+        elif 'requestId' in data:
+            return data['requestId'], None
         
         return None, None
         
     except Exception as e:
-        log(f"Error creating job: {str(e)}", level='ERROR')
+        log(f"Error creating job for {model_name}: {str(e)}", level='ERROR')
         return None, None
 
 def poll_for_result(job_id, endpoint, get_url=None, max_attempts=60, interval=2):
-    """Poll for job result - supports multiple endpoints"""
+    """Poll for job result"""
     try:
         headers = {
             'Authorization': f'Bearer {config.WAVESPEED_API_KEY}'
         }
         
-        # Use provided get_url or construct status URL
+        # Build status URL
         if get_url:
             status_url = get_url
         else:
-            base_url = endpoint.rsplit('/', 1)[0]
-            status_url = f"{base_url}/status/{job_id}"
+            status_url = f"https://api.wavespeed.ai/api/v3/predictions/{job_id}/result"
         
         for attempt in range(max_attempts):
             try:
@@ -194,12 +234,11 @@ def poll_for_result(job_id, endpoint, get_url=None, max_attempts=60, interval=2)
                         if outputs:
                             return outputs[0]
                     elif status == 'failed':
-                        log(f"Job {job_id} failed", level='ERROR')
                         return None
                 else:
                     status = data.get('status')
-                    if status == 'completed':
-                        return data.get('result_url') or data.get('output', {}).get('url')
+                    if status == 'completed' or status == 'succeeded':
+                        return data.get('output') or data.get('result_url') or data.get('outputs', [None])[0]
                     elif status == 'failed':
                         return None
                 
@@ -216,12 +255,10 @@ def poll_for_result(job_id, endpoint, get_url=None, max_attempts=60, interval=2)
 def download_and_upload_image(task_id, image_url, filename):
     """Download image from URL and upload to ClickUp"""
     try:
-        # Download image
         img_response = requests.get(image_url, timeout=30)
         img_response.raise_for_status()
         image_bytes = img_response.content
         
-        # Upload to ClickUp
         url = f"{config.CLICKUP_API_BASE}/task/{task_id}/attachment"
         
         headers = {
@@ -242,7 +279,13 @@ def download_and_upload_image(task_id, image_url, filename):
         log(f"Error uploading {filename}: {e}", "ERROR")
         return False
 
-def process_single_model_aspect(task_id, model, aspect_name, width, height, image_base64, prompt):
+def upload_temp_image(image_bytes):
+    """Upload image to temporary storage and return URL"""
+    # For now, we'll use the ClickUp attachment URL directly
+    # In production, you'd upload to S3/CloudFlare R2/etc
+    return None
+
+def process_single_model_aspect(task_id, model, aspect_name, width, height, image_url, prompt):
     """Process a single model + aspect ratio combination"""
     try:
         model_name = model['name']
@@ -253,11 +296,12 @@ def process_single_model_aspect(task_id, model, aspect_name, width, height, imag
         
         # Create job
         job_id, get_url = create_image_edit_job(
-            image_base64=image_base64,
+            image_url=image_url,
             prompt=prompt,
             width=width,
             height=height,
-            endpoint=endpoint
+            endpoint=endpoint,
+            model_name=model_name
         )
         
         if not job_id:
@@ -308,8 +352,7 @@ def update_custom_field(task_id, checked=False):
 @celery.task(bind=True, max_retries=3)
 def process_clickup_task(self, task_id, user_description):
     """
-    Main Celery task for processing ClickUp tasks
-    Processes with 6 AI models in parallel, generates 12 images total
+    Main Celery task - processes with 6 AI models in parallel
     """
     try:
         log(f"🚀 Starting task {task_id} (Worker: {self.request.hostname})")
@@ -360,7 +403,6 @@ def process_clickup_task(self, task_id, user_description):
         for attachment in attachments:
             fname = attachment.get('title', '')
 
-            # Skip files we created (prevent recursive loop)
             if fname.startswith('edited_'):
                 continue
 
@@ -386,8 +428,8 @@ def process_clickup_task(self, task_id, user_description):
         if not image_bytes:
             return {"status": "error", "reason": "conversion_failed"}
         
-        # Encode to base64
-        image_base64 = base64.b64encode(image_bytes).decode('utf-8')
+        # Use the original ClickUp URL (all models accept URLs)
+        image_url = file_url
         
         # Format prompt with Gemini
         log("Optimizing prompt with Gemini...")
@@ -395,8 +437,8 @@ def process_clickup_task(self, task_id, user_description):
         
         # Define aspect ratios
         aspect_ratios = {
-            '9:16': (1088, 1920),  # Stories
-            '1:1': (1408, 1408)     # Feed
+            '9:16': (1088, 1920),
+            '1:1': (1408, 1408)
         }
         
         log(f"📐 Processing {len(aspect_ratios)} aspect ratios × {len(MODELS)} models = {len(aspect_ratios) * len(MODELS)} total images")
@@ -405,18 +447,16 @@ def process_clickup_task(self, task_id, user_description):
         uploaded_files = []
         
         with ThreadPoolExecutor(max_workers=12) as executor:
-            # Submit all jobs
             futures = []
             for aspect_name, (width, height) in aspect_ratios.items():
                 for model in MODELS:
                     future = executor.submit(
                         process_single_model_aspect,
                         task_id, model, aspect_name, width, height,
-                        image_base64, formatted_prompt
+                        image_url, formatted_prompt
                     )
                     futures.append(future)
             
-            # Collect results
             for future in as_completed(futures):
                 result = future.result()
                 if result:
@@ -424,7 +464,7 @@ def process_clickup_task(self, task_id, user_description):
         
         log(f"📊 Successfully uploaded {len(uploaded_files)}/{len(MODELS) * len(aspect_ratios)} images")
         
-        # Uncheck field ONLY after ALL uploads complete
+        # Uncheck field after ALL uploads
         update_custom_field(task_id, checked=False)
         
         log("✅ Task completed successfully!", "SUCCESS")
