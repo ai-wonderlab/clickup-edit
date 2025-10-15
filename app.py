@@ -6,12 +6,14 @@ from flask import Flask, request, jsonify
 import requests
 import json
 import time
+import redis
 from config import config
 from tasks import process_clickup_task
 
 app = Flask(__name__)
 
-processed_webhooks = set()
+# Initialize Redis client for deduplication and locking
+redis_client = redis.from_url(config.REDIS_URL)
 
 def log(message, level="INFO"):
     """Simple logging function"""
@@ -39,36 +41,46 @@ def get_task_details(task_id):
 @app.route('/webhook', methods=['POST'])
 def webhook_handler():
     """
-    Handle incoming ClickUp webhooks
+    Handle incoming ClickUp webhooks with Redis-based deduplication and locking
     Returns 200 immediately and queues task for background processing
     """
     try:
         data = request.json
         log(f"📥 Webhook received")
         
-        # Extract task information
+        # 1️⃣ WEBHOOK-LEVEL DEDUPLICATION
+        webhook_id = data.get('webhook_id')
+        if webhook_id:
+            dedup_key = f"webhook:{webhook_id}"
+            if redis_client.get(dedup_key):
+                log("⏭️ Duplicate webhook ignored", "WARNING")
+                return jsonify({"status": "duplicate"}), 200
+            # Mark webhook as processed (expires in 60 seconds)
+            redis_client.setex(dedup_key, 60, "processed")
+        
+        # 2️⃣ CHECK EVENT TYPE
+        event = data.get('event')
+        if event != 'taskUpdated':
+            log("⏭️ Non-update event ignored", "INFO")
+            return jsonify({"status": "ignored", "reason": "not_task_update"}), 200
+        
+        # 3️⃣ EXTRACT TASK INFORMATION
         task_id = data.get('task_id')
         history_items = data.get('history_items', [])
         
-        # DEDUPLICATION: Check if already processed
-        webhook_signature = None
-        if history_items:
-            webhook_signature = history_items[0].get('id')
-            
-            if webhook_signature and webhook_signature in processed_webhooks:
-                log(f"⏭️  Duplicate webhook ignored", "WARNING")
-                return jsonify({"status": "ignored", "reason": "duplicate"}), 200
-        
         if not task_id:
-            log("⚠️  No task_id in webhook", "WARNING")
+            log("⚠️ No task_id in webhook", "WARNING")
             return jsonify({"status": "ignored", "reason": "no_task_id"}), 200
         
-        # Get task details to check custom field
+        if not history_items:
+            log("⚠️ No history items", "WARNING")
+            return jsonify({"status": "ignored", "reason": "no_history"}), 200
+        
+        # 4️⃣ GET TASK DETAILS AND CHECK CUSTOM FIELD
         task_data = get_task_details(task_id)
         if not task_data:
             return jsonify({"status": "error", "reason": "could not get task"}), 200
         
-        # Check if custom field (boolean checkbox) is checked
         custom_fields = task_data.get('custom_fields', [])
         should_process = False
         user_description = task_data.get('description', '')
@@ -78,7 +90,7 @@ def webhook_handler():
                 field_value = field.get('value')
                 if field_value is True or field_value == 'true':
                     should_process = True
-                    log("✅ Checkbox CHECKED - queuing task")
+                    log("✅ Checkbox CHECKED - proceeding")
                     break
                 else:
                     log("❌ Checkbox UNCHECKED - ignoring")
@@ -86,13 +98,17 @@ def webhook_handler():
         if not should_process:
             return jsonify({"status": "ignored", "reason": "checkbox_not_checked"}), 200
         
-        # Mark as processed
-        if webhook_signature:
-            processed_webhooks.add(webhook_signature)
-            if len(processed_webhooks) > 1000:
-                processed_webhooks.pop()
+        # 5️⃣ TASK-LEVEL LOCKING (prevent duplicate processing)
+        lock_key = f"task_lock:{task_id}"
         
-        # 🚀 QUEUE THE TASK FOR BACKGROUND PROCESSING
+        if redis_client.get(lock_key):
+            log("🔒 Task already processing - ignoring", "WARNING")
+            return jsonify({"status": "already_running"}), 200
+        
+        # Set lock (expires in 10 minutes = 600 seconds)
+        redis_client.setex(lock_key, 600, "locked")
+        
+        # 6️⃣ QUEUE THE TASK FOR BACKGROUND PROCESSING
         task = process_clickup_task.delay(task_id, user_description)
         
         log(f"🎯 Task queued: {task.id}")

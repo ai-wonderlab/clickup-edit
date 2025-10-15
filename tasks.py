@@ -8,6 +8,7 @@ import requests
 import base64
 import time
 import logging
+import redis
 from config import config
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import tempfile
@@ -468,8 +469,26 @@ def process_clickup_task(self, task_id, user_description):
         update_custom_field(task_id, checked=False)
         
         log("✅ Task completed successfully!", "SUCCESS")
+        
+        # 🔓 Release lock on success
+        try:
+            redis_client = redis.from_url(config.REDIS_URL)
+            redis_client.delete(f"task_lock:{task_id}")
+            log(f"🔓 Lock released for task {task_id}")
+        except Exception as lock_error:
+            log(f"Warning: Could not release lock: {lock_error}", "WARNING")
+        
         return {"status": "success", "task_id": task_id, "images_created": len(uploaded_files)}
         
     except Exception as e:
         log(f"Task failed: {e}", "ERROR")
+        
+        # 🔓 Release lock on failure too
+        try:
+            redis_client = redis.from_url(config.REDIS_URL)
+            redis_client.delete(f"task_lock:{task_id}")
+            log(f"🔓 Lock released for task {task_id} (after failure)")
+        except Exception as lock_error:
+            log(f"Warning: Could not release lock: {lock_error}", "WARNING")
+        
         raise self.retry(exc=e, countdown=60 * (2 ** self.request.retries))
