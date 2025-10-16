@@ -1,6 +1,6 @@
 """
 Celery Tasks for ClickUp Image Processing
-Handles async background processing with 6 AI models
+Handles async background processing with 5 AI models
 """
 from celery_config import celery
 from file_converters import convert_to_png
@@ -13,6 +13,7 @@ from config import config
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import tempfile
 import os
+import glob
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -63,30 +64,88 @@ def download_file(file_url):
         log(f"Error downloading file: {e}", "ERROR")
         return None
 
-def format_prompt_with_gemini(user_description):
-    """Format user description into optimized prompt using Gemini"""
+def format_prompt_with_claude(user_description, model_name):
+    """
+    Format user description into optimized prompt using Claude Sonnet 4.5
+    Loads model-specific research and activation files dynamically
+    """
     try:
-        try:
-            with open('activation_guide.txt', 'r') as f:
-                activation_guide = f.read()
-        except:
-            activation_guide = ""
-            
-        try:
-            with open('deep_research.txt', 'r') as f:
-                deep_research = f.read()
-        except:
-            deep_research = ""
+        research_dir = 'researches'
         
-        system_prompt = f"""{activation_guide}
+        # Search for model-specific files (case-insensitive, partial match)
+        def find_model_file(pattern_keywords, file_type):
+            """Find file matching model name keywords"""
+            if not os.path.exists(research_dir):
+                log(f"⚠️ Research directory not found: {research_dir}", "WARNING")
+                return ""
+            
+            # Try each keyword (e.g., 'qwen', 'nano', 'seedream')
+            for keyword in pattern_keywords:
+                # Search for files containing keyword
+                search_pattern = os.path.join(research_dir, f"*{keyword}*{file_type}.txt")
+                matching_files = glob.glob(search_pattern, recursive=False)
+                
+                if matching_files:
+                    # Return first match
+                    filepath = matching_files[0]
+                    try:
+                        with open(filepath, 'r', encoding='utf-8') as f:
+                            content = f.read()
+                            log(f"📄 Loaded: {os.path.basename(filepath)}")
+                            return content
+                    except Exception as e:
+                        log(f"⚠️ Error reading {filepath}: {e}", "WARNING")
+            
+            return ""
+        
+        # Build search keywords based on model name
+        # Handle special cases: qwen/qwenplus both use 'qwen', wan25 uses 'wan'
+        search_keywords = []
+        model_lower = model_name.lower()
+        
+        if 'qwen' in model_lower:
+            search_keywords = ['qwen']
+        elif 'wan' in model_lower:
+            search_keywords = ['wan2.5', 'wan25', 'wan']
+        elif 'nano' in model_lower or 'banana' in model_lower:
+            search_keywords = ['nano_banana', 'nanobanana', 'nano']
+        elif 'seedream' in model_lower:
+            search_keywords = ['seedream']
+        else:
+            # Fallback: use model name as-is
+            search_keywords = [model_name]
+        
+        # Load model-specific files
+        activation_content = find_model_file(search_keywords, '_activation')
+        research_content = find_model_file(search_keywords, '_research')
+        
+        # Fallback to generic files if model-specific not found
+        if not activation_content:
+            log(f"⚠️ No activation file found for {model_name}, using generic", "WARNING")
+            try:
+                with open('activation_guide.txt', 'r', encoding='utf-8') as f:
+                    activation_content = f.read()
+            except:
+                activation_content = ""
+        
+        if not research_content:
+            log(f"⚠️ No research file found for {model_name}, using generic", "WARNING")
+            try:
+                with open('deep_research.txt', 'r', encoding='utf-8') as f:
+                    research_content = f.read()
+            except:
+                research_content = ""
+        
+        # Build system prompt
+        system_prompt = f"""{activation_content}
 
-{deep_research}"""
+{research_content}"""
         
         user_message = f"""USER DESCRIPTION: {user_description}
 
-Think deeply about this vision and translate it into the perfect SeaDream v4 prompt.
+Think deeply about this vision and translate it into the perfect prompt for {model_name}.
 
-OUTPUT (optimized SeaDream v4 prompt only):"""
+OUTPUT (optimized prompt only):"""
 
         headers = {
             "Authorization": f"Bearer {config.OPENROUTER_API_KEY}",
@@ -107,7 +166,7 @@ OUTPUT (optimized SeaDream v4 prompt only):"""
             "stream": False
         }
         
-        log("Sending prompt to Gemini 2.5 Pro...")
+        log(f"🧠 Sending to Claude for {model_name}...")
         
         response = requests.post(
             "https://openrouter.ai/api/v1/chat/completions",
@@ -120,15 +179,15 @@ OUTPUT (optimized SeaDream v4 prompt only):"""
         result = response.json()
         formatted_prompt = result['choices'][0]['message']['content'].strip()
         
-        log(f"✅ Gemini optimized prompt: {formatted_prompt[:100]}...")
+        log(f"✅ Claude prompt ready for {model_name}: {formatted_prompt[:80]}...")
         return formatted_prompt
         
     except Exception as e:
-        log(f"Error with Gemini: {e}", "ERROR")
+        log(f"Error with Claude for {model_name}: {e}", "ERROR")
         return user_description
 
 def create_image_edit_job(image_url, prompt, width, height, endpoint, model_name):
-    """Create image editing job - supports all 6 models with correct payloads"""
+    """Create image editing job - supports all 5 models with correct payloads"""
     try:
         headers = {
             'Authorization': f'Bearer {config.WAVESPEED_API_KEY}',
@@ -160,16 +219,6 @@ def create_image_edit_job(image_url, prompt, width, height, endpoint, model_name
                 'prompt': prompt,
                 'seed': -1,
                 'size': f'{width}*{height}'
-            }
-        elif 'qwen-image/edit-lora' in endpoint:
-            payload = {
-                'enable_base64_output': False,
-                'enable_sync_mode': False,
-                'image': image_url,
-                'loras': [],
-                'output_format': 'png',
-                'prompt': prompt,
-                'seed': -1
             }
         elif 'nano-banana' in endpoint:
             # Nano Banana uses aspect_ratio, not size
@@ -280,14 +329,8 @@ def download_and_upload_image(task_id, image_url, filename):
         log(f"Error uploading {filename}: {e}", "ERROR")
         return False
 
-def upload_temp_image(image_bytes):
-    """Upload image to temporary storage and return URL"""
-    # For now, we'll use the ClickUp attachment URL directly
-    # In production, you'd upload to S3/CloudFlare R2/etc
-    return None
-
 def process_single_model_aspect(task_id, model, aspect_name, width, height, image_url, prompt):
-    """Process a single model + aspect ratio combination"""
+    """Process a single model + aspect ratio combination with pre-generated prompt"""
     try:
         model_name = model['name']
         endpoint = model['endpoint']
@@ -295,7 +338,7 @@ def process_single_model_aspect(task_id, model, aspect_name, width, height, imag
         
         log(f"Processing {display_name} - {aspect_name} ({width}x{height})")
         
-        # Create job
+        # Create job with provided prompt
         job_id, get_url = create_image_edit_job(
             image_url=image_url,
             prompt=prompt,
@@ -353,12 +396,14 @@ def update_custom_field(task_id, checked=False):
 @celery.task(bind=True, max_retries=3)
 def process_clickup_task(self, task_id, user_description):
     """
-    Main Celery task - processes with 6 AI models in parallel
+    Main Celery task - processes with 5 AI models in parallel
+    Phase 1: Generate 5 model-specific prompts (parallel)
+    Phase 2: Process 10 images (5 models × 2 aspects) (parallel)
     """
     try:
         log(f"🚀 Starting task {task_id} (Worker: {self.request.hostname})")
         
-        # Define all 6 models
+        # Define all 5 models
         MODELS = [
             {
                 'name': 'seedream',
@@ -379,11 +424,6 @@ def process_clickup_task(self, task_id, user_description):
                 'name': 'wan25',
                 'endpoint': 'https://api.wavespeed.ai/api/v3/alibaba/wan-2.5/image-edit',
                 'display_name': 'Alibaba Wan 2.5'
-            },
-            {
-                'name': 'qwenlora',
-                'endpoint': 'https://api.wavespeed.ai/api/v3/wavespeed-ai/qwen-image/edit-lora',
-                'display_name': 'Qwen LoRA'
             },
             {
                 'name': 'nanobanana',
@@ -429,12 +469,31 @@ def process_clickup_task(self, task_id, user_description):
         if not image_bytes:
             return {"status": "error", "reason": "conversion_failed"}
         
+        log("PSD converted successfully")
+        
         # Use the original ClickUp URL (all models accept URLs)
         image_url = file_url
         
-        # Format prompt with Gemini
-        log("Optimizing prompt with Gemini...")
-        formatted_prompt = format_prompt_with_gemini(user_description)
+        # PHASE 1: Generate model-specific prompts in parallel
+        log("🧠 PHASE 1: Generating model-specific prompts with Claude Sonnet 4.5...")
+        
+        model_prompts = {}
+        with ThreadPoolExecutor(max_workers=5) as executor:
+            future_to_model = {
+                executor.submit(format_prompt_with_claude, user_description, model['name']): model['name']
+                for model in MODELS
+            }
+            
+            for future in as_completed(future_to_model):
+                model_name = future_to_model[future]
+                try:
+                    prompt = future.result()
+                    model_prompts[model_name] = prompt
+                except Exception as e:
+                    log(f"⚠️ Failed to generate prompt for {model_name}: {e}", "WARNING")
+                    model_prompts[model_name] = user_description  # Fallback to original
+        
+        log(f"✅ Generated {len(model_prompts)}/5 model-specific prompts")
         
         # Define aspect ratios
         aspect_ratios = {
@@ -442,19 +501,22 @@ def process_clickup_task(self, task_id, user_description):
             '1:1': (1408, 1408)
         }
         
-        log(f"📐 Processing {len(aspect_ratios)} aspect ratios × {len(MODELS)} models = {len(aspect_ratios) * len(MODELS)} total images")
+        # PHASE 2: Process all images in parallel
+        log(f"🎨 PHASE 2: Processing {len(aspect_ratios)} aspect ratios × {len(MODELS)} models = {len(aspect_ratios) * len(MODELS)} total images")
         
-        # Process all models in parallel
         uploaded_files = []
         
-        with ThreadPoolExecutor(max_workers=12) as executor:
+        with ThreadPoolExecutor(max_workers=10) as executor:
             futures = []
             for aspect_name, (width, height) in aspect_ratios.items():
                 for model in MODELS:
+                    # Get pre-generated prompt for this model
+                    model_prompt = model_prompts.get(model['name'], user_description)
+                    
                     future = executor.submit(
                         process_single_model_aspect,
                         task_id, model, aspect_name, width, height,
-                        image_url, formatted_prompt
+                        image_url, model_prompt
                     )
                     futures.append(future)
             
