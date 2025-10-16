@@ -235,7 +235,7 @@ Score: ___/100
                     ]
                 }
             ],
-            "temperature": 0.3,  # Lower temperature for consistent validation
+            "temperature": 0.4,  # Lower temperature for consistent validation
             "max_tokens": 1000
         }
         
@@ -428,9 +428,9 @@ OUTPUT (refined prompt only - NO OTHER TEXT):"""
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_message}
             ],
-            "temperature": 0.7,
-            "max_tokens": 2000,
-            "top_p": 0.95
+            "temperature": 0.5,
+            "max_tokens": 1000,
+            "top_p": 0.90
         }
         
         start_time = time.time()
@@ -545,9 +545,23 @@ def format_prompt_with_claude(user_description, model_name):
                 log(f"⚠️ No generic research file found", "WARNING")
         
         # Build system prompt
-        system_prompt = f"""{activation_content}
+        system_prompt = f"""You are a PROMPT GENERATOR, not a pattern navigator.
 
-{research_content}"""
+            Your ONLY job: Convert user descriptions into SHORT, DIRECT image editing prompts.
+
+            {activation_content}
+
+            {research_content}
+
+            **CRITICAL - YOUR ROLE:**
+            - The above research teaches you PATTERNS
+            - YOU must OUTPUT a simple prompt using those patterns
+            - DO NOT explain the patterns
+            - DO NOT write tutorials or workflows
+            - DO NOT use phrases like "Based on the patterns...", "Stage 1:", "Workflow:", etc.
+
+            **YOU ARE NOT:** A pattern navigator, tutorial writer, or workflow designer
+            **YOU ARE:** A prompt generator that uses patterns to create concise instructions"""
         
         log(f"📦 System prompt built (length: {len(system_prompt)} chars)")
         
@@ -573,9 +587,9 @@ OUTPUT (optimized prompt only):"""
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_message}
             ],
-            "temperature": 0.7,
-            "max_tokens": 2000,
-            "top_p": 0.95,
+            "temperature": 0.5,
+            "max_tokens": 1000,
+            "top_p": 0.90,
             "stream": False
         }
         
