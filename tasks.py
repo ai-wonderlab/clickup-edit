@@ -396,13 +396,22 @@ PREVIOUS PROMPT (that didn't pass validation): {original_prompt}
 
 VALIDATION ISSUES: {validation_feedback}
 
-Based on the deep research patterns and the validation feedback, create a REFINED prompt for {model_name} that:
-1. Addresses the specific issues mentioned in the validation feedback
-2. Maintains all successful aspects of the previous prompt
-3. Uses the documented patterns from the research to improve weak areas
-4. Is more precise and explicit about requirements
+**CRITICAL INSTRUCTIONS:**
+1. Output ONLY a direct, executable image editing prompt
+2. NO explanations, NO analysis, NO workflows, NO tutorials
+3. NO phrases like "Based on", "The model's", "STAGE 1", etc.
+4. JUST the editing instructions in plain language
+5. Maximum 2-3 sentences
 
-OUTPUT (refined optimized prompt only):"""
+Example of what to output:
+"Move the KUDU COFFEE logo 200 pixels to the right. Change the text '20%' to '30%' maintaining the same font weight and color."
+
+Example of what NOT to output:
+"Based on the validation feedback, the architectural reality suggests a multi-stage workflow..."
+
+Create a REFINED, DIRECT prompt for {model_name} that addresses the validation issues.
+
+OUTPUT (refined prompt only - NO OTHER TEXT):"""
 
         log(f"📤 Sending refinement request to Claude...")
         
