@@ -211,7 +211,7 @@ Score: ___/100
         
         # Build message with both images
         payload = {
-            "model": config.OPENROUTER_MODEL,
+            "model": config.OPENROUTER_VALIDATION_MODEL,
             "messages": [
                 {
                     "role": "user",

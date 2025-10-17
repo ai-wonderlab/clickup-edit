@@ -14,6 +14,7 @@ class Config:
     # OpenRouter Configuration (Gemini)
     OPENROUTER_API_KEY = os.getenv('OPENROUTER_API_KEY')
     OPENROUTER_MODEL = os.getenv('OPENROUTER_MODEL', 'anthropic/claude-sonnet-4.5')
+    OPENROUTER_VALIDATION_MODEL = os.getenv('OPENROUTER_VALIDATION_MODEL', 'anthropic/claude-3.5-sonnet')
     GEMINI_THINKING_MODE = os.getenv('GEMINI_THINKING_MODE', 'high')
     
     # WaveSpeed.ai Configuration (SeaDream)
