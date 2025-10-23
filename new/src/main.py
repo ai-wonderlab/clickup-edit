@@ -7,7 +7,17 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .api import health, webhooks
 from .providers import OpenRouterClient, WaveSpeedAIClient, ClickUpClient
-from .core import PromptEnhancer, ImageGenerator, Validator, Refiner, HybridFallback, Orchestrator
+from .core import (
+    PromptEnhancer, 
+    ImageGenerator, 
+    Validator, 
+    Refiner, 
+    HybridFallback, 
+    Orchestrator,
+    StrictDualValidator,
+    SmartRetrySystem,
+    OrchestratorWithSmartRetry
+)
 from .utils.config import load_config, get_config
 from .utils.logger import get_logger
 
@@ -81,6 +91,9 @@ async def lifespan(app: FastAPI):
         
         max_iterations = config.processing.max_iterations if config.processing else 3
         
+        # ============================================================================
+        # EXISTING ORCHESTRATOR (KEEP AS FALLBACK)
+        # ============================================================================
         orchestrator = Orchestrator(
             enhancer=enhancer,
             generator=generator,
@@ -92,7 +105,52 @@ async def lifespan(app: FastAPI):
         
         logger.info("Core components initialized")
         
-        # Store in app state for access in routes
+        # ============================================================================
+        # NEW: STRICT DUAL VALIDATION + SMART RETRY SYSTEM
+        # ============================================================================
+        
+        # Initialize Strict Dual Validator
+        strict_dual_validator = StrictDualValidator(
+            openrouter_client=openrouter,
+            validation_prompt_template=validator.validation_prompt_template,
+            score_threshold=9.0,  # Both models must score ≥9.0
+            both_must_pass=True   # Strict consensus
+        )
+        
+        # Initialize Smart Retry System
+        smart_retry_system = SmartRetrySystem(
+            max_retries=5,                    # Up to 5 retry attempts
+            incremental_threshold=8.0,        # Score ≥8.0 → use edited image
+            catastrophic_threshold=5.0        # Score <5.0 → restart from original
+        )
+        
+        # Initialize New Orchestrator
+        orchestrator_new = OrchestratorWithSmartRetry(
+            enhancer=enhancer,
+            generator=generator,
+            strict_dual_validator=strict_dual_validator,
+            smart_retry_system=smart_retry_system,
+            hybrid_fallback=hybrid_fallback,
+            max_retries=5
+        )
+        
+        logger.info("Dual validation system initialized")
+        
+        # ============================================================================
+        # FEATURE FLAG: Choose which orchestrator to use
+        # ============================================================================
+        USE_NEW_ORCHESTRATOR = os.getenv('USE_NEW_ORCHESTRATOR', 'false').lower() == 'true'
+        
+        if USE_NEW_ORCHESTRATOR:
+            active_orchestrator = orchestrator_new
+            logger.info("🚀 Using NEW orchestrator (Dual Validation + Smart Retry)")
+        else:
+            active_orchestrator = orchestrator
+            logger.info("📌 Using OLD orchestrator (Single Validation)")
+        
+        # ============================================================================
+        # Store in app state
+        # ============================================================================
         app.state.config = config
         app.state.openrouter = openrouter
         app.state.wavespeed = wavespeed
@@ -102,7 +160,11 @@ async def lifespan(app: FastAPI):
         app.state.validator = validator
         app.state.refiner = refiner
         app.state.hybrid_fallback = hybrid_fallback
-        app.state.orchestrator = orchestrator
+        
+        # Store BOTH orchestrators
+        app.state.orchestrator = orchestrator           # OLD (fallback)
+        app.state.orchestrator_new = orchestrator_new   # NEW
+        app.state.active_orchestrator = active_orchestrator  # 🎯 ACTIVE ONE
         
         logger.info("Application startup complete")
         
