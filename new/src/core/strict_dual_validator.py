@@ -63,7 +63,7 @@ class StrictDualValidator:
         
         # Model configurations
         self.claude_model = "anthropic/claude-sonnet-4.5"
-        self.gpt_model = "openai/gpt-4-turbo"  # Using GPT-4 Turbo with Vision
+        self.gpt_model = "openai/gpt-5-pro"  # Using GPT-4 Turbo with Vision
         
         logger.info(
             "Strict Dual Validator initialized",
