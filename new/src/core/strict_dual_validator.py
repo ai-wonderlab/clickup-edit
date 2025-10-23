@@ -209,30 +209,77 @@ These issues MUST be fixed in the edited image.
         """Validate with Claude Sonnet 4.5"""
         logger.info("🤖 Validating with Claude Sonnet 4.5 (temp=0.0)...")
         
-        # Use existing OpenRouter client's validate_image method
-        result = await self.openrouter.validate_image(
-            image_url="",  # Not used, we pass bytes
-            original_image_bytes=original_bytes,
-            original_request=prompt,
-            model_name="claude",
-            validation_prompt_template=prompt
+        # Convert to base64 for Claude API
+        import base64
+        original_b64 = base64.b64encode(original_bytes).decode('utf-8')
+        edited_b64 = base64.b64encode(edited_bytes).decode('utf-8')
+        
+        # Build Claude-specific payload
+        payload = {
+            "model": self.claude_model,
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": prompt
+                        },
+                        {
+                            "type": "image",
+                            "source": {
+                                "type": "base64",
+                                "media_type": "image/png",
+                                "data": original_b64
+                            }
+                        },
+                        {
+                            "type": "image",
+                            "source": {
+                                "type": "base64",
+                                "media_type": "image/png",
+                                "data": edited_b64
+                            }
+                        }
+                    ]
+                }
+            ],
+            "max_tokens": 1000,
+            "temperature": 0.0
+        }
+        
+        # Call OpenRouter
+        response = await self.openrouter.client.post(
+            f"{self.openrouter.base_url}/chat/completions",
+            json=payload
+        )
+        
+        self.openrouter._handle_response_errors(response)
+        
+        data = response.json()
+        validation_text = data["choices"][0]["message"]["content"]
+        
+        # Parse response using existing method
+        parsed = self.openrouter._parse_validation_response(
+            validation_text,
+            "claude-sonnet-4.5"
         )
         
         logger.info(
             f"✅ Claude validation complete",
             extra={
-                "score": result.score,
-                "passed": result.passed,
-                "issues_count": len(result.issues)
+                "score": parsed.score,
+                "passed": parsed.passed,
+                "issues_count": len(parsed.issues)
             }
         )
         
         return {
             'model': 'Claude Sonnet 4.5',
-            'pass_fail': 'PASS' if result.passed else 'FAIL',
-            'score': result.score,
-            'issues': result.issues,
-            'reasoning': result.reasoning
+            'pass_fail': 'PASS' if parsed.passed else 'FAIL',
+            'score': parsed.score,
+            'issues': parsed.issues,
+            'reasoning': parsed.reasoning
         }
     
     async def _validate_with_gpt(
