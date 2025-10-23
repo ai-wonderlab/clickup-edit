@@ -1,0 +1,41 @@
+image_models:
+  # - name: seedream-v4
+  #   provider: wavespeed
+  #   priority: 1
+  #   supports_greek: true
+  # - name: qwen-edit-plus
+  #   provider: wavespeed
+  #   priority: 2
+  #   supports_greek: true
+  - name: wan-2.5-edit
+    provider: wavespeed
+    priority: 3
+    supports_greek: true
+  # - name: nano-banana
+  #   provider: wavespeed
+  #   priority: 4
+  #   supports_greek: true
+
+enhancement:
+  model: anthropic/claude-sonnet-4.5
+  provider: openrouter
+  max_tokens: 2000
+  temperature: 0.7
+  cache_enabled: true
+
+validation:
+  model: anthropic/claude-sonnet-4.5
+  provider: openrouter
+  max_tokens: 1000
+  temperature: 0.0
+  vision_enabled: true
+
+processing:
+  max_iterations: 3
+  timeout_seconds: 60
+  parallel_execution: true
+
+quality_thresholds:
+  minimum_validation_score: 75
+  greek_typography_accuracy: 95
+  hybrid_fallback_threshold: 3

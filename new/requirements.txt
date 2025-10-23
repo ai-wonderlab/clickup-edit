@@ -1,0 +1,39 @@
+# Web Framework
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+python-multipart==0.0.6
+
+# Async HTTP Client
+httpx==0.25.1
+
+# Data Validation
+pydantic==2.5.0
+pydantic-settings==2.1.0
+
+# YAML Configuration
+pyyaml==6.0.1
+
+# Image Processing
+Pillow==10.1.0
+
+# Utilities
+python-dotenv==1.0.0
+tenacity==8.2.3
+
+# Testing
+pytest==7.4.3
+pytest-asyncio==0.21.1
+pytest-cov==4.1.0
+pytest-mock==3.12.0
+
+# Code Quality
+black==23.11.0
+flake8==6.1.0
+mypy==1.7.0
+
+# Monitoring (optional)
+prometheus-client==0.19.0
+
+PyMuPDF>=1.23.0          # PDF conversion (fitz)
+psd-tools>=1.9.0         # PSD files
+cairosvg>=2.7.0          # SVG to PNG
