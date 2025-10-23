@@ -149,52 +149,52 @@ VALIDATION EXAMPLES:
 Example 1 - PASS (Score 10):
 Request: "Move logo to top-right corner"
 Result: Logo moved to top-right, pixel-perfect quality, old position cleaned, everything else identical
-{
+{{
   "pass_fail": "PASS",
   "score": 10,
   "issues": ["No issues found"],
   "reasoning": "Logo moved correctly with perfect quality preservation. No unauthorized changes."
-}
+}}
 
 Example 2 - FAIL (Logo distortion):
 Request: "Move logo to the right"
 Result: Logo moved but appears warped/distorted
-{
+{{
   "pass_fail": "FAIL",
   "score": 4,
   "issues": ["Logo visually distorted after move - shape warped, appears merged or corrupted. Logo quality must be pixel-perfect."],
   "reasoning": "Critical logo preservation failure. Logo distortion is automatic fail regardless of correct positioning."
-}
+}}
 
 Example 3 - FAIL (Greek text error):
 Request: "Add text 'ΕΚΤΟΣ ΑΠΟ FREDDO'"
 Result: Shows "ΕΚΤΌΣ ΑΠΟ FREDDO" (tone on Ο)
-{
+{{
   "pass_fail": "FAIL",
   "score": 5,
   "issues": ["Unwanted tone mark added to Greek capital Ο (became Ό). Uppercase Greek should have no tones unless explicitly in request."],
   "reasoning": "Greek text error. Unauthorized tone added to uppercase letter."
-}
+}}
 
 Example 4 - FAIL (Duplication):
 Request: "Move logo to left"
 Result: Logo appears at BOTH old and new positions
-{
+{{
   "pass_fail": "FAIL",
   "score": 3,
   "issues": ["Logo duplicated - appears at both old and new positions. MOVE means remove from old + add to new, not copy."],
   "reasoning": "Move operation failed. Element must appear only once at new position."
-}
+}}
 
 Example 5 - FAIL (Unauthorized change):
 Request: "Change subtitle to 'NEW OFFER'"
 Result: Subtitle changed correctly, but logo resized and background color changed
-{
+{{
   "pass_fail": "FAIL",
   "score": 5,
   "issues": ["Logo resized smaller - no resize requested, logo must stay same size", "Background color changed - no background change requested"],
   "reasoning": "Requested change correct but two unauthorized modifications detected."
-}
+}}
 
 ═══════════════════════════════════════════════════════════════
 
@@ -202,12 +202,12 @@ JSON RESPONSE FORMAT:
 
 Return ONLY this JSON structure:
 
-{
+{{
   "pass_fail": "PASS" or "FAIL",
   "score": 0-10 (integer),
   "issues": ["Specific issue 1", "Specific issue 2", ...] or ["No issues found"],
   "reasoning": "Brief explanation of your decision"
-}
+}}
 
 CRITICAL JSON RULES:
 • pass_fail: exactly "PASS" or "FAIL" (case-sensitive)
