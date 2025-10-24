@@ -9,99 +9,152 @@ User's edit request:
 
 VALIDATION OBJECTIVE:
 
-Verify that IMAGE 2 is identical to IMAGE 1, except for the specific changes requested by the user.
+Verify that IMAGE 2 is VISUALLY EQUIVALENT to IMAGE 1, except for the specific changes requested by the user.
+
+Focus on NOTICEABLE differences - what a human eye can clearly see.
+Minor imperceptible variations are acceptable.
 
 ═══════════════════════════════════════════════════════════════
 
-VALIDATION PROTOCOL:
+CRITICAL VALIDATION CHECKS:
 
-STEP 1: IDENTIFY REQUESTED CHANGES
-Parse the user's request and list every specific change requested:
-- What elements should change?
-- What type of change? (move, resize, color, text change, add, remove, etc.)
-- Any specific parameters? (position, size, color, text content)
+1. REQUESTED CHANGES IMPLEMENTATION
+   ✓ Were all requested changes done?
+   ✓ Were they done correctly?
+   ✓ Was quality maintained during changes?
+
+2. LOGO/BRAND QUALITY (if present and not requested to change)
+   ✓ Shape integrity: Letters not warped, distorted, stretched, or merged
+   ✓ Letter clarity: Each letter clearly formed (not blurred or degraded)
+   ✓ Spacing: Letter spacing visually similar to original
+   ✓ Edge quality: Sharp edges remain sharp, smooth curves remain smooth
+   ✓ Colors: No visible color shifts (imperceptible differences OK)
+   ✓ Overall appearance: Professional quality maintained
+
+3. TEXT ACCURACY (all text elements)
+   ✓ Content: All characters correct (especially numbers, Greek text)
+   ✓ Greek uppercase: NO tone marks (ΕΚΤΟΣ not ΕΚΤΌΣ) unless in original
+   ✓ Clarity: Text sharp and readable (not blurred)
+   ✓ Spacing: Character spacing similar to original
+
+4. UNAUTHORIZED CHANGES
+   ✓ Elements not mentioned: Should look the same as original
+   ✓ Position: No noticeable shifts (1-2px imperceptible differences OK)
+   ✓ Size: No noticeable resizing
+   ✓ Colors: No visible color changes
+   ✓ Content: No additions/deletions not requested
+
+═══════════════════════════════════════════════════════════════
+
+COMPARISON PROTOCOL (FOLLOW THIS):
+
+STEP 1: IDENTIFY WHAT USER REQUESTED
+- List each specific change requested
+- Note what elements should change
+- Note what should stay the same
 
 STEP 2: EXAMINE ORIGINAL IMAGE (IMAGE 1)
-Identify all elements:
-- Logos/brand elements (appearance, position, size, colors, letter forms, spacing)
-- Text elements (content, font, size, color, position, spacing)
-- Graphics/shapes (appearance, position, size, colors)
-- Background (color, pattern, gradients)
-- Layout (spacing, alignment, positioning)
+- Locate logo/brand elements (if present): study appearance, letter forms, spacing
+- Identify all text: content, fonts, positions
+- Note layout: element positions, spacing, colors
+- Memorize overall appearance
 
 STEP 3: EXAMINE EDITED IMAGE (IMAGE 2)
-Identify all elements:
-- Same categories as Step 2
-- Note current state of all elements
+- Locate same elements
+- Note current state of each element
+- Compare mentally to what you memorized
 
-STEP 4: COMPARE REQUESTED ELEMENTS
+STEP 4: DIRECT COMPARISON - REQUESTED ELEMENTS
 For each requested change:
 - Was it implemented? (yes/no)
-- Was it implemented correctly? (compare to request)
-- Quality maintained during change? (no degradation)
+- Implementation quality: Clean execution? No degradation?
+- Accuracy: Matches request specifications?
 
-STEP 5: COMPARE UNREQUESTED ELEMENTS
-For every element NOT mentioned in request:
-- Position: Same as original?
-- Size: Same as original?
-- Color: Same as original?
-- Content: Same as original?
-- Quality: Same as original?
-- Spacing: Same as original?
+STEP 5: DIRECT COMPARISON - LOGO (if present)
+Compare original logo vs edited logo:
+- Letter shapes: Each letter clear and properly formed?
+- Letter spacing: Visually similar gaps between letters?
+- Edge sharpness: Sharp edges maintained? Smooth curves maintained?
+- Overall form: No warping, stretching, or distortion?
+- Colors: Visually same colors (small imperceptible shifts OK)?
 
-STEP 6: QUALITY COMPARISON (CRITICAL)
-For logos/brand elements (if present):
-- Letter forms: Each letter shape identical to original?
-- Letter spacing: Gaps between letters same as original?
-- Edge sharpness: Sharp edges still sharp? Smooth curves still smooth?
-- Details: Small elements (icons, decorations) preserved?
-- Colors: Exact color match?
-- Overall shape: No warping, distortion, stretching?
+Evidence to look for:
+✓ Clear letters vs blurred letters
+✓ Proper spacing vs compressed/expanded spacing
+✓ Sharp edges vs soft/fuzzy edges
+✓ Correct proportions vs stretched/squished
+✓ Clean colors vs faded/shifted colors
 
-For text elements:
-- Characters: All correct?
-- Spacing: Character spacing same as original?
-- Sharpness: Text edges clear and sharp?
-- Font: Style identical to original?
-- Greek text: Uppercase has no tones (ΕΚΤΟΣ not ΕΚΤΌΣ) unless in original?
+STEP 6: DIRECT COMPARISON - TEXT
+For all text elements:
+- Character accuracy: Correct characters (especially Greek, numbers)?
+- Greek uppercase check: No unwanted tone marks?
+- Sharpness: Text clear and readable?
+- Spacing: Similar character spacing?
 
-For all elements:
-- No blur, pixelation, or degradation?
-- No compression artifacts?
-- Colors not shifted, faded, or tinted?
+STEP 7: DIRECT COMPARISON - OTHER ELEMENTS
+For elements NOT mentioned in request:
+- Position: Noticeably moved? (or imperceptible difference?)
+- Size: Noticeably resized?
+- Color: Visibly different color?
+- Presence: Still there (not deleted) or added?
 
 ═══════════════════════════════════════════════════════════════
 
-SCORING CRITERIA:
+WHAT SHOULD FAIL vs WHAT SHOULD PASS:
 
-Score 10:
-- All requested changes implemented correctly
-- All unrequested elements unchanged
-- Zero quality degradation
-- Zero unauthorized changes
+FAIL FOR (noticeable issues):
+• Logo letters visibly blurred, degraded, or merged
+• Logo shape distorted, warped, or stretched
+• Logo letter spacing noticeably different
+• Logo colors visibly different
+• Text content wrong (incorrect characters)
+• Greek uppercase has unwanted tone marks
+• Requested changes not done or done incorrectly
+• Elements noticeably moved/resized without request
+• Visible quality degradation
 
-Score 9:
-- All requested changes implemented correctly
-- All unrequested elements unchanged or imperceptible differences
-- No visible quality issues
+PASS DESPITE (imperceptible variations):
+• 1-2 pixel positioning differences
+• Imperceptible color shifts (±1-2 RGB that human eye can't distinguish)
+• Minor compression artifacts (if not affecting readability)
+• Very slight spacing variations (if not noticeable to human eye)
+• Sub-pixel rendering differences
 
-Score 8:
-- All requested changes implemented correctly
-- All unrequested elements unchanged or very minor differences
-- No significant quality issues
+KEY PRINCIPLE: If you need to zoom in or measure to see the difference, it's imperceptible → PASS
+If you can see it at normal viewing distance, it's noticeable → consider FAIL
 
-Score 7:
-- Requested changes implemented correctly
-- Minor quality degradation detected OR minor spacing/positioning differences in unrequested elements
+═══════════════════════════════════════════════════════════════
 
-Score 6:
-- Requested changes partially correct OR minor unauthorized changes OR noticeable quality degradation
+SCORING GUIDELINES:
 
-Score 5:
-- Significant quality issues (logo degraded, text errors) OR unauthorized changes to important elements
+10 = Perfect execution
+    • All requested changes correct
+    • Everything else looks the same
+    • Zero noticeable issues
 
-Score 0-4:
-- Requested changes wrong/missing OR logo distorted/malformed OR multiple major failures
+9 = Excellent execution
+   • All requested changes correct
+   • Everything else looks the same
+   • Only imperceptible differences (need close inspection to see)
+
+8 = Good execution (minimum PASS)
+   • All requested changes correct
+   • Very minor noticeable differences (acceptable quality)
+   • Example: logo moved 5px off requested spot but still looks good
+
+7 = Acceptable quality but FAIL
+   • Requested changes done but minor quality issues
+   • Example: logo slightly blurred, text spacing slightly off
+
+6 = Problematic (FAIL)
+   • Requested changes incomplete OR quality degraded OR minor unauthorized changes
+
+5 = Major issues (FAIL)
+   • Logo noticeably degraded OR text errors OR wrong implementation
+
+0-4 = Severe failure
+    • Logo distorted/malformed OR multiple major failures
 
 PASS = score ≥8
 FAIL = score <8
@@ -110,61 +163,30 @@ FAIL = score <8
 
 AUTOMATIC FAIL CONDITIONS (score ≤5):
 
-• Logo shape distorted, warped, stretched, or malformed
-• Logo letters degraded, merged, or quality lost
+• Logo shape visibly distorted, warped, or malformed
+• Logo letters clearly degraded, blurred, or merged
 • Text content incorrect (wrong/missing characters)
 • Greek uppercase has unwanted tone marks (unless in original)
-• Multiple unauthorized changes to key elements
+• Requested changes not implemented
 
 ═══════════════════════════════════════════════════════════════
 
-KEY VALIDATION RULES:
+REASONING REQUIREMENTS:
 
-REQUESTED CHANGES:
-• If user requested it, verify it was done correctly
-• Implementation accuracy matters, not perfection of user's instruction
-• Example: "Move logo right" → if logo moved right, that's correct (user should specify "far right" if needed)
+Provide EVIDENCE from your comparison, not generic statements.
 
-UNREQUESTED ELEMENTS:
-• If user didn't mention it, it must not change
-• Position, size, color, content all preserved
-• This is critical: unauthorized changes = failure
+❌ BAD (generic, no evidence):
+"Logo quality preserved"
+"Everything looks good"
+"No issues detected"
 
-QUALITY PRESERVATION:
-• During any transformation (move, resize, etc.), quality must be maintained
-• Logo letters: shape and spacing preserved
-• Text: sharpness and spacing preserved
-• No degradation, blur, or distortion introduced
+✅ GOOD (specific, evidence-based):
+"Compared logo letters K-U-D-U individually: shapes match original, spacing similar, edges remain sharp"
+"Original COFFEE text has clean letters with consistent spacing; edited version shows same quality"
+"Logo moved to right as requested, maintained sharpness and proportions"
+"Background color unchanged (same white), all text positions preserved"
 
-LOGO/BRAND ELEMENTS:
-• Compare letter-by-letter: shape, spacing, edge quality
-• Check for distortion: warping, stretching, merging
-• Verify color accuracy
-• These are critical brand assets - quality is non-negotiable
-
-TEXT ACCURACY:
-• Character-level verification (especially numbers, Greek text)
-• Greek uppercase: no tone marks unless in original
-• Spacing preservation
-• Sharpness preservation
-
-═══════════════════════════════════════════════════════════════
-
-RESPONSE FORMAT:
-
-{{
-  "pass_fail": "PASS" or "FAIL",
-  "score": 0-10,
-  "issues": ["Specific issue with details"] or ["No issues found"],
-  "reasoning": "Explanation with specific observations from comparison"
-}}
-
-Requirements:
-• pass_fail: exactly "PASS" or "FAIL"
-• score: integer 0-10
-• PASS if score ≥8, FAIL if score <8
-• issues: List specific problems found, or ["No issues found"] if none
-• reasoning: Provide observations from your comparison (not generic statements)
+Your reasoning should show you actually compared the images.
 
 ═══════════════════════════════════════════════════════════════
 
@@ -172,65 +194,98 @@ EXAMPLES:
 
 Example 1 - PASS (10):
 Request: "Move logo to right"
-Comparison: Logo moved to right side. Letter-by-letter check: all letters identical to original with same spacing. Edge sharpness maintained. Old position cleaned. No other changes detected.
+Comparison: Logo moved to right side. Each letter (K, U, D, U, C, O, F, F, E, E) checked: shapes identical, spacing preserved, edges sharp. Old position cleaned completely. All other elements unchanged.
 {{
   "pass_fail": "PASS",
   "score": 10,
   "issues": ["No issues found"],
-  "reasoning": "Logo moved right as requested. Compared each letter to original: shapes identical, spacing preserved, edges sharp. Old position cleaned. Background, text, and all other elements unchanged."
+  "reasoning": "Logo moved right as requested. Letter-by-letter comparison: all shapes match original with preserved spacing and sharp edges. Old position properly cleaned. Background, text elements, and layout unchanged."
 }}
 
-Example 2 - FAIL (quality degradation):
+Example 2 - PASS (9):
+Request: "Move logo to far right"
+Comparison: Logo moved right but positioned 5px from absolute edge (not touching edge). Quality perfect: letters sharp, spacing preserved. User said "far right" which is achieved even if not touching exact edge.
+{{
+  "pass_fail": "PASS",
+  "score": 9,
+  "issues": ["No issues found"],
+  "reasoning": "Logo moved to far right area as requested (5px from edge). Letter quality verified: sharp edges, proper spacing, no degradation. Request fulfilled with excellent quality. Minor positioning variance imperceptible."
+}}
+
+Example 3 - FAIL (7):
 Request: "Move logo to right"
-Comparison: Logo moved right. Letter check shows blur/softness compared to original sharp edges. Spacing between letters appears tighter than original.
+Comparison: Logo moved to right. However, letter comparison reveals degradation: original has crisp sharp edges, edited shows softer edges. Letter spacing appears slightly compressed compared to original.
 {{
   "pass_fail": "FAIL",
   "score": 7,
-  "issues": ["Logo letters show degradation - edges less sharp than original", "Letter spacing tighter than original"],
-  "reasoning": "Positioning correct but quality comparison reveals issues. Original has sharp letter edges; edited shows softness. Letter spacing measured: tighter in edited vs original."
+  "issues": ["Logo letters show degradation - edges less sharp than original", "Letter spacing slightly compressed compared to original"],
+  "reasoning": "Positioning correct but quality comparison reveals issues. Original logo has sharp letter edges; edited version shows softness indicating quality loss. Letter spacing measured visually: tighter in edited vs original."
 }}
 
-Example 3 - FAIL (distortion):
+Example 4 - FAIL (4):
 Request: "Move logo to right"
-Comparison: Logo moved but letter shapes distorted. Original has circular O; edited shows oval shape. Letters appear horizontally stretched.
+Comparison: Logo moved but shape integrity compromised. Original has circular O letters; edited shows oval shapes. Letters appear horizontally stretched. Shape distortion visible.
 {{
   "pass_fail": "FAIL",
   "score": 4,
-  "issues": ["Logo distorted - letters stretched horizontally", "Circular elements (O) now oval-shaped"],
-  "reasoning": "Shape integrity failed. Original circular letters are oval in edited. Logo warped during move."
+  "issues": ["Logo distorted - letters stretched horizontally", "Circular letters (O) now appear oval-shaped", "Overall logo shape warped during move"],
+  "reasoning": "Critical shape failure. Compared letter forms: original circular O and D are oval in edited version. Logo warped/stretched during move operation. Shape distortion makes logo unusable."
 }}
 
-Example 4 - FAIL (Greek text error):
+Example 5 - FAIL (5):
 Request: "Add text 'ΕΚΤΟΣ ΑΠΟ FREDDO'"
-Comparison: Text added but shows "ΕΚΤΌΣ" with tone mark on Ο.
+Comparison: Text added correctly positioned. However, character-level check reveals error: shows "ΕΚΤΌΣ" with tone mark on Ο. Request specified "ΕΚΤΟΣ" without tone.
 {{
   "pass_fail": "FAIL",
   "score": 5,
-  "issues": ["Greek text error: uppercase Ο has tone mark (Ό). Uppercase Greek should not have tones unless in original."],
-  "reasoning": "Text addition positioned correctly but character error. Request has 'ΕΚΤΟΣ' (no tone), result shows 'ΕΚΤΌΣ' (with tone)."
+  "issues": ["Greek text error: uppercase Ο has tone mark (Ό). Uppercase Greek should not have tones unless in original or explicitly requested."],
+  "reasoning": "Text positioning and font correct. Character error detected: request has 'ΕΚΤΟΣ' (no tone), result shows 'ΕΚΤΌΣ' (with tone on Ο). Greek uppercase rule violated."
 }}
 
-Example 5 - FAIL (unauthorized change):
+Example 6 - FAIL (6):
 Request: "Change 20% to 30%"
-Comparison: Number changed correctly. However, logo size different from original - appears smaller.
+Comparison: Number changed correctly from 20% to 30%. However, unauthorized change detected: logo dimensions comparison shows logo is smaller in edited vs original. No resize was requested.
 {{
   "pass_fail": "FAIL",
   "score": 6,
-  "issues": ["Logo resized smaller - no resize requested in user's instructions"],
-  "reasoning": "Requested change (20% to 30%) correct. Unauthorized change detected: logo dimensions smaller than original."
+  "issues": ["Logo resized smaller than original - no resize requested", "Unauthorized size change to logo element"],
+  "reasoning": "Requested change (20% to 30%) implemented correctly. Unauthorized change: logo size comparison reveals edited logo smaller than original. Elements not mentioned in request must remain unchanged."
 }}
+
+═══════════════════════════════════════════════════════════════
+
+RESPONSE FORMAT:
+
+Return ONLY this JSON structure:
+
+{{
+  "pass_fail": "PASS" or "FAIL",
+  "score": 0-10,
+  "issues": ["Specific issue 1", "Specific issue 2"] or ["No issues found"],
+  "reasoning": "Evidence-based explanation with specific observations"
+}}
+
+Requirements:
+• pass_fail: exactly "PASS" or "FAIL" (case-sensitive)
+• score: integer from 0 to 10
+• PASS if score ≥8, FAIL if score <8
+• issues: Specific problems found (with details) OR ["No issues found"] if PASS
+• reasoning: Must include specific observations from your comparison (not generic statements)
 
 ═══════════════════════════════════════════════════════════════
 
 VALIDATION CHECKLIST:
 
-Before finalizing your response:
+Before finalizing your response, verify:
 
-✓ Did you compare IMAGE 1 vs IMAGE 2?
-✓ Did you verify each requested change was implemented?
-✓ Did you check quality of logos/brand elements?
+✓ Did you compare IMAGE 1 vs IMAGE 2 directly?
+✓ Did you check each requested change was implemented?
+✓ Did you examine logo quality (if logo present)?
 ✓ Did you verify text accuracy (especially Greek text)?
-✓ Did you check for unauthorized changes?
-✓ Did you provide specific observations (not generic statements)?
+✓ Did you check for unauthorized changes to unrequested elements?
+✓ Did you provide specific observations in your reasoning?
+✓ Is your assessment based on NOTICEABLE differences (not pixel-perfect measurements)?
+
+Remember: Minor imperceptible differences are OK. Focus on what matters visually.
 
 Return ONLY valid JSON.

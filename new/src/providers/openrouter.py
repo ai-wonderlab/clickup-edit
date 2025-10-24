@@ -47,263 +47,232 @@ class OpenRouterClient(BaseProvider):
         original_prompt: str,
         model_name: str,
         deep_research: str,
-        original_image_bytes: Optional[bytes] = None,  # ✅ Receive bytes not URL
+        original_image_bytes: Optional[bytes] = None,
         cache_enabled: bool = True,
     ) -> str:
-        """
-        Enhance a prompt using Claude Sonnet 4.5.
-        
-        Args:
-            original_prompt: Original user prompt
-            model_name: Target image model name
-            deep_research: Combined activation + research content
-            cache_enabled: Enable prompt caching
-            
-        Returns:
-            Enhanced prompt string
-            
-        Raises:
-            ProviderError: If API request fails
-        """
+        """Enhance user prompt using Claude with system/user split."""
         self._ensure_client()
         
-        # Construct enhancement system prompt
-        system_prompt = f"""You are an expert prompt optimizer for the {model_name} image editing model.
-
-        === CRITICAL OPERATIONAL RULES ===
-        1. OUTPUT FORMAT: Return ONLY the enhanced prompt text - nothing else
-        2. NO ANALYSIS: Do not explain limitations, concerns, or alternatives
-        3. NO QUESTIONS: Do not ask the user anything
-        4. NO REFUSALS: Always enhance the prompt, even if the request seems difficult
-        5. NO PREAMBLES: Do not write "Here's the enhanced prompt:" or similar
-        6. NO POSTAMBLES: Do not add notes, warnings, or recommendations
-        7. JUST THE PROMPT: Pure enhanced prompt text only
-
-        If you output ANYTHING other than the enhanced prompt, the system will fail.
-
-        {deep_research}
-
-        Your task: Transform the user's edit request into an optimized prompt that maximizes success rate.
-
-        Enhancement requirements:
-        1. Preserve the user's core intent exactly
-        2. Add explicit preservation instructions (especially for Greek text)
-        3. Specify quality and edge handling requirements
-        4. Include lighting and color consistency instructions
-        5. Keep the enhanced prompt focused and actionable
-        6. Use concrete technical language, no philosophical discussion
-
-        OUTPUT: Enhanced prompt text ONLY. Start immediately with the prompt content."""
-
-        # Build user message with optional image
-        user_content = []
-
-        # ✅ USE PNG BYTES FROM MEMORY (NO DOWNLOAD NEEDED)
-        if original_image_bytes:
-            logger.info(
-                "🖼️ Converting PNG to base64 for enhancement",
-                extra={"model": model_name, "size_kb": len(original_image_bytes) / 1024}
-            )
-            
-            # Convert to base64 directly (PNG already in memory!)
-            img_b64 = base64.b64encode(original_image_bytes).decode('utf-8')
-            
-            logger.info(
-                "✅ PNG converted to base64 for enhancement",
-                extra={"model": model_name}
-            )
-            
-            # Add as base64 data URL
-            user_content.append({
-                "type": "image_url",
-                "image_url": {
-                    "url": f"data:image/png;base64,{img_b64}",
-                    "detail": "high"
-                }
-            })
-
-        # Add text prompt
-        user_content.append({
-            "type": "text",
-            "text": f"Original edit request: {original_prompt}\n\nOUTPUT ONLY THE ENHANCED PROMPT. NO EXPLANATIONS. NO QUESTIONS. JUST THE PROMPT TEXT:",
-        })
-
-        # Build messages with proper caching
-        if cache_enabled:
-            # Use content array with cache_control for caching
-            payload = {
-                "model": "anthropic/claude-sonnet-4.5",
-                "messages": [
-                    {
-                        "role": "system",
-                        "content": [
-                            {
-                                "type": "text",
-                                "text": system_prompt,
-                                "cache_control": {"type": "ephemeral"}
-                            }
-                        ]
-                    },
-                    {
-                        "role": "user",
-                        "content": user_content,
-                    }
-                ],
-                "max_tokens": 2000,
-                "temperature": 0.7,
-            }
-        else:
-            # Standard payload without caching
-            payload = {
-                "model": "anthropic/claude-sonnet-4.5",
-                "messages": [
-                    {
-                        "role": "system",
-                        "content": system_prompt,
-                    },
-                    {
-                        "role": "user",
-                        "content": user_content,
-                    }
-                ],
-                "max_tokens": 2000,
-                "temperature": 0.7,
-            }
-        
         try:
+            # ═══════════════════════════════════════════════════════════
+            # SYSTEM PROMPT = Entire deep research (activation + research)
+            # ═══════════════════════════════════════════════════════════
+            system_prompt = deep_research  # ~8K tokens
+            
+            # ═══════════════════════════════════════════════════════════
+            # USER PROMPT = Simple enhancement request
+            # ═══════════════════════════════════════════════════════════
+            user_text = f"""Enhance this image editing request for {model_name}:
+
+{original_prompt}
+
+Output: Enhanced prompt only."""
+            
+            # ═══════════════════════════════════════════════════════════
+            # BUILD USER CONTENT (text + optional image)
+            # ═══════════════════════════════════════════════════════════
+            user_content = [
+                {
+                    "type": "text",
+                    "text": user_text
+                }
+            ]
+            
+            # Add image if provided
+            if original_image_bytes:
+                img_b64 = base64.b64encode(original_image_bytes).decode('utf-8')
+                user_content.append({
+                    "type": "image_url",
+                    "image_url": {
+                        "url": f"data:image/png;base64,{img_b64}"
+                    }
+                })
+            
+            # ═══════════════════════════════════════════════════════════
+            # BUILD MESSAGES (system/user split)
+            # ═══════════════════════════════════════════════════════════
+            messages = [
+                {
+                    "role": "system",
+                    "content": system_prompt  # ✅ All research & activation
+                },
+                {
+                    "role": "user",
+                    "content": user_content  # ✅ Simple request + image
+                }
+            ]
+            
+            # ═══════════════════════════════════════════════════════════
+            # BUILD PAYLOAD with LOCKED PARAMETERS
+            # ═══════════════════════════════════════════════════════════
+            payload = {
+                "model": "anthropic/claude-sonnet-4.5",
+                "messages": messages,
+                "max_tokens": 4000,
+                "temperature": 0.3,
+                "top_p": 0.95,
+                # ✅ LOCK PROVIDER
+                "provider": {
+                    "order": ["Anthropic"],
+                    "allow_fallbacks": False
+                }
+            }
+            
+            # ═══════════════════════════════════════════════════════════
+            # API CALL
+            # ═══════════════════════════════════════════════════════════
             response = await self.client.post(
                 f"{self.base_url}/chat/completions",
                 json=payload,
                 timeout=None
             )
-
-            print(f"🔍 API Response Status: {response.status_code}")
-            print(f"🔍 API Response Headers: {dict(response.headers)}")
-            print(f"🔍 Raw response length: {len(response.text)} chars")
             
             self._handle_response_errors(response)
             
             data = response.json()
-            enhanced = data["choices"][0]["message"]["content"]
+            
+            # ═══════════════════════════════════════════════════════════
+            # VERIFY NO FALLBACK
+            # ═══════════════════════════════════════════════════════════
+            actual_model = data.get("model", "unknown")
+            
+            if actual_model != "anthropic/claude-sonnet-4.5":
+                logger.warning(
+                    f"Provider fallback in enhancement: {actual_model}",
+                    extra={
+                        "expected": "anthropic/claude-sonnet-4.5",
+                        "actual": actual_model,
+                        "image_model": model_name
+                    }
+                )
             
             logger.info(
-                "Prompt enhanced successfully",
+                "Enhancement complete",
                 extra={
-                    "model": model_name,
-                    "original_length": len(original_prompt),
-                    "enhanced_length": len(enhanced),
+                    "model_requested": "anthropic/claude-sonnet-4.5",
+                    "model_actual": actual_model,
+                    "image_model": model_name,
+                    "has_image": original_image_bytes is not None
                 }
             )
             
+            # ═══════════════════════════════════════════════════════════
+            # RETURN ENHANCED PROMPT
+            # ═══════════════════════════════════════════════════════════
+            enhanced = data["choices"][0]["message"]["content"]
             return enhanced.strip()
             
-        except httpx.HTTPStatusError as e:
-            self._handle_response_errors(e.response)
-            raise  # Should not reach here
+        except Exception as e:
+            logger.error(
+                f"Enhancement failed: {e}",
+                extra={
+                    "model": model_name,
+                    "error": str(e)
+                },
+                exc_info=True
+            )
+            
+            # Fallback: return original prompt
+            logger.warning(f"Returning original prompt due to enhancement failure")
+            return original_prompt
     
     @retry_async(max_attempts=3, exceptions=(httpx.RequestError, ProviderError))
     async def validate_image(
         self,
-        image_url: str,
-        original_image_bytes: bytes,  # ✅ Receive bytes not URL
-        original_request: str,
-        model_name: str,
-        validation_prompt_template: str,
+        image_url: str,  # Edited image (CloudFront URL)
+        original_image_bytes: bytes,  # Original image (PNG bytes)
+        original_request: str,  # User's request
+        model_name: str,  # Which model generated it
+        validation_prompt_template: str  # ✅ This becomes SYSTEM prompt
     ) -> ValidationResult:
-        """
-        Validate an edited image using Claude 4.5 Sonnet with vision.
-        Downloads both images locally and sends as base64 for 100% reliability.
-        
-        Args:
-            image_url: Temporary URL of generated image
-            original_image_url: URL of original image
-            original_request: Original edit request
-            model_name: Model that generated the image
-            validation_prompt_template: Validation prompt template
-            
-        Returns:
-            ValidationResult
-            
-        Raises:
-            ProviderError: If API request fails
-        """
+        """Validate edited image using Claude with system/user split."""
         self._ensure_client()
         
         try:
-            # ✅ ORIGINAL PNG ALREADY IN MEMORY (NO DOWNLOAD!)
-            logger.info(
-                "✅ Using PNG from memory for validation",
-                extra={"size_kb": len(original_image_bytes) / 1024}
-            )
+            # ═══════════════════════════════════════════════════════════
+            # SYSTEM PROMPT = Entire validation prompt (290 lines)
+            # ═══════════════════════════════════════════════════════════
+            system_prompt = validation_prompt_template
             
-            # Only download the GENERATED image
-            logger.info("📥 Downloading generated image for validation")
+            # ═══════════════════════════════════════════════════════════
+            # USER PROMPT = Simple task
+            # ═══════════════════════════════════════════════════════════
+            user_text = f"""Validate this edit.
+
+USER REQUEST: {original_request}
+
+Compare IMAGE 1 (original) with IMAGE 2 (edited).
+Return ONLY JSON."""
+            
+            # ═══════════════════════════════════════════════════════════
+            # PREPARE IMAGES
+            # ═══════════════════════════════════════════════════════════
+            # Original image: bytes → base64
+            original_b64 = base64.b64encode(original_image_bytes).decode('utf-8')
+            original_data_url = f"data:image/png;base64,{original_b64}"
+            
+            # Edited image: download from URL
+            logger.info("📥 Downloading edited image for validation")
             async with httpx.AsyncClient(timeout=30.0) as download_client:
-                generated_response = await download_client.get(image_url)
-                generated_response.raise_for_status()
-                generated_bytes = generated_response.content
+                edited_response = await download_client.get(image_url)
+                edited_response.raise_for_status()
+                edited_bytes = edited_response.content
             
-            logger.info(
-                "✅ Generated image downloaded",
-                extra={"size_kb": len(generated_bytes) / 1024}
-            )
+            edited_b64 = base64.b64encode(edited_bytes).decode('utf-8')
+            edited_data_url = f"data:image/png;base64,{edited_b64}"
             
-            # Convert both images to base64
-            original_b64 = base64.b64encode(original_image_bytes).decode('utf-8')  # ✅ Use bytes from memory
-            generated_b64 = base64.b64encode(generated_bytes).decode('utf-8')
+            logger.info("✅ Both images prepared for validation")
             
-            logger.info("✅ Both images converted to base64, starting validation")
-            
-        except Exception as e:
-            logger.error(
-                f"Failed to download images for validation: {e}",
-                extra={"error": str(e)}
-            )
-            raise ProviderError(
-                "openrouter",
-                f"Failed to download images for validation: {str(e)}",
-                500
-            )
-        
-        # Format validation prompt
-        validation_prompt = validation_prompt_template.format(
-            original_request=original_request,
-            model_name=model_name,
-        )
-        
-        # ✅ SEND AS BASE64 DATA URLS (100% reliable - no URL dependency)
-        payload = {
-            "model": "anthropic/claude-sonnet-4.5",
-            "messages": [
+            # ═══════════════════════════════════════════════════════════
+            # BUILD MESSAGES (system/user split)
+            # ═══════════════════════════════════════════════════════════
+            messages = [
+                {
+                    "role": "system",
+                    "content": system_prompt  # ✅ All validation instructions
+                },
                 {
                     "role": "user",
                     "content": [
                         {
                             "type": "text",
-                            "text": validation_prompt,
+                            "text": user_text
                         },
                         {
                             "type": "image_url",
                             "image_url": {
-                                "url": f"data:image/png;base64,{original_b64}",
-                                "detail": "high"
+                                "url": original_data_url
                             }
                         },
                         {
                             "type": "image_url",
                             "image_url": {
-                                "url": f"data:image/png;base64,{generated_b64}",
-                                "detail": "high"
+                                "url": edited_data_url
                             }
                         }
                     ]
                 }
-            ],
-            "max_tokens": 1000,
-            "temperature": 0.0,
-        }
-        
-        try:
+            ]
+            
+            # ═══════════════════════════════════════════════════════════
+            # BUILD PAYLOAD with LOCKED PARAMETERS
+            # ═══════════════════════════════════════════════════════════
+            payload = {
+                "model": "anthropic/claude-sonnet-4.5",
+                "messages": messages,
+                "max_tokens": 2000,
+                "temperature": 0.0,
+                "top_p": 0.95,
+                # ✅ LOCK PROVIDER (prevent fallbacks)
+                "provider": {
+                    "order": ["Anthropic"],
+                    "allow_fallbacks": False
+                }
+            }
+            
+            # ═══════════════════════════════════════════════════════════
+            # API CALL
+            # ═══════════════════════════════════════════════════════════
             response = await self.client.post(
                 f"{self.base_url}/chat/completions",
                 json=payload,
@@ -312,32 +281,101 @@ class OpenRouterClient(BaseProvider):
             self._handle_response_errors(response)
             
             data = response.json()
-            validation_text = data["choices"][0]["message"]["content"]
-
-            print(f"\n{'='*80}")
-            print(f"🔍 RAW VALIDATION RESPONSE for {model_name}")
-            print(f"🔍 RAW VALIDATION RESPONSE for {model_name} (length: {len(validation_text)} chars)")
-            print(f"{'='*80}")
-            print(validation_text)
-            print(f"{'='*80}\n")
             
-            # Parse validation response
-            result = self._parse_validation_response(validation_text, model_name)
+            # ═══════════════════════════════════════════════════════════
+            # VERIFY NO FALLBACK
+            # ═══════════════════════════════════════════════════════════
+            actual_model = data.get("model", "unknown")
             
             logger.info(
-                "✅ Image validated successfully",
+                "Validation complete",
                 extra={
-                    "model": model_name,
-                    "passed": result.passed,
-                    "score": result.score,
+                    "model_requested": "anthropic/claude-sonnet-4.5",
+                    "model_actual": actual_model,
+                    "provider_locked": True,
+                    "image_model": model_name
                 }
             )
             
-            return result
+            # Alert if fallback occurred
+            if actual_model != "anthropic/claude-sonnet-4.5":
+                logger.error(
+                    "🚨 PROVIDER FALLBACK DETECTED",
+                    extra={
+                        "expected": "anthropic/claude-sonnet-4.5",
+                        "actual": actual_model
+                    }
+                )
             
-        except httpx.HTTPStatusError as e:
-            self._handle_response_errors(e.response)
-            raise  # Should not reach here
+            # ═══════════════════════════════════════════════════════════
+            # PARSE JSON RESPONSE
+            # ═══════════════════════════════════════════════════════════
+            content = data["choices"][0]["message"]["content"]
+            
+            # Strip markdown code blocks if present
+            import re
+            content = re.sub(r'```json\s*', '', content)
+            content = re.sub(r'```\s*$', '', content)
+            content = content.strip()
+            
+            # Parse JSON
+            result_data = json.loads(content)
+            
+            # Validate structure
+            required_keys = ["pass_fail", "score", "issues", "reasoning"]
+            if not all(key in result_data for key in required_keys):
+                raise ValueError(f"Missing required keys: {required_keys}")
+            
+            # Validate pass_fail value
+            if result_data["pass_fail"] not in ["PASS", "FAIL"]:
+                raise ValueError(f"Invalid pass_fail value: {result_data['pass_fail']}")
+            
+            # Build result
+            return ValidationResult(
+                model_name=model_name,
+                passed=(result_data["pass_fail"] == "PASS"),
+                score=result_data["score"],
+                issues=result_data["issues"],
+                reasoning=result_data["reasoning"],
+                status=ValidationStatus.PASS if result_data["pass_fail"] == "PASS" else ValidationStatus.FAIL,
+            )
+            
+        except json.JSONDecodeError as e:
+            logger.error(
+                f"JSON parse error: {e}",
+                extra={
+                    "raw_content": content[:500] if 'content' in locals() else "N/A",
+                    "model": model_name
+                }
+            )
+            
+            return ValidationResult(
+                model_name=model_name,
+                passed=False,
+                score=0,
+                issues=[f"JSON parse error: {str(e)}"],
+                reasoning="Validation response was not valid JSON",
+                status=ValidationStatus.ERROR,
+            )
+            
+        except Exception as e:
+            logger.error(
+                f"Validation failed: {e}",
+                extra={
+                    "model": model_name,
+                    "error": str(e)
+                },
+                exc_info=True
+            )
+            
+            return ValidationResult(
+                model_name=model_name,
+                passed=False,
+                score=0,
+                issues=[f"Validation error: {str(e)}"],
+                reasoning="Validation process failed",
+                status=ValidationStatus.ERROR,
+            )
     
     def _parse_validation_response(
         self,
