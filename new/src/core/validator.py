@@ -108,7 +108,9 @@ class Validator:
         original_image_bytes: bytes,  # ✅ Receive PNG
     ) -> List[ValidationResult]:
         """
-        Validate ALL generated images in parallel.
+        Validate ALL generated images SEQUENTIALLY with delays.
+        
+        Changed from parallel to sequential to avoid rate limits with extended thinking.
         
         Args:
             generated_images: List of generated images
@@ -118,20 +120,29 @@ class Validator:
             List of ValidationResult objects (includes failures as ERROR status)
         """
         logger.info(
-            f"Starting parallel validation for {len(generated_images)} images",
+            f"Starting sequential validation for {len(generated_images)} images",
             extra={
                 "models": [img.model_name for img in generated_images]
             }
         )
         
-        # Create tasks for all images
-        tasks = [
-            self.validate_single(image, original_request, original_image_bytes)
-            for image in generated_images
-        ]
-        
-        # Execute in parallel with exception handling
-        results = await asyncio.gather(*tasks, return_exceptions=True)
+        # Execute SEQUENTIALLY with delays between validations
+        results = []
+        for i, image in enumerate(generated_images):
+            logger.info(f"Validating image {i+1}/{len(generated_images)}: {image.model_name}")
+            
+            try:
+                result = await self.validate_single(image, original_request, original_image_bytes)
+                results.append(result)
+            except Exception as e:
+                # Store exception for later handling
+                results.append(e)
+            
+            # Add delay between validations (except after last one)
+            if i < len(generated_images) - 1:
+                delay = 2  # 2 seconds between validations
+                logger.info(f"⏱️ Waiting {delay} seconds before next validation (avoid rate limits)")
+                await asyncio.sleep(delay)
         
         # Separate successes from failures
         validation_results = []
