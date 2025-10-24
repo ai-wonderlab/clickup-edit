@@ -108,9 +108,14 @@ Output: Enhanced prompt only."""
             payload = {
                 "model": "anthropic/claude-sonnet-4.5",
                 "messages": messages,
-                "max_tokens": 4000,
-                "temperature": 0.3,
-                "top_p": 0.95,
+                "max_tokens": 8000,
+                # temperature removed - defaults to 1.0 (required for thinking)
+                
+                # ✅ ADD THINKING MODE
+                "reasoning": {
+                    "effort": "medium"  # Medium for enhancement (faster)
+                },
+                
                 # ✅ LOCK PROVIDER
                 "provider": {
                     "order": ["Anthropic"],
@@ -260,9 +265,14 @@ Return ONLY JSON."""
             payload = {
                 "model": "anthropic/claude-sonnet-4.5",
                 "messages": messages,
-                "max_tokens": 2000,
-                "temperature": 0.0,
-                "top_p": 0.95,
+                "max_tokens": 8000,
+                # temperature removed - defaults to 1.0 (required for thinking)
+                
+                # ✅ ADD THINKING MODE
+                "reasoning": {
+                    "effort": "high"  # High effort for validation (accuracy critical)
+                },
+                
                 # ✅ LOCK PROVIDER (prevent fallbacks)
                 "provider": {
                     "order": ["Anthropic"],
