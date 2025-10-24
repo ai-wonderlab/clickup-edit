@@ -98,6 +98,7 @@ async def lifespan(app: FastAPI):
             refiner=refiner,
             hybrid_fallback=hybrid_fallback,
             max_iterations=max_iterations,
+            config=config,
         )
         
         logger.info("Core components initialized")
