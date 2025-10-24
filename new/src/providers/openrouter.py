@@ -615,6 +615,17 @@ Return ONLY JSON."""
             try:
                 error_data = response.json()
                 error_message = error_data.get("error", {}).get("message", response.text)
+                
+                # ✅ ADD THIS LOGGING
+                logger.error(
+                    "Full OpenRouter error response",
+                    extra={
+                        "status_code": response.status_code,
+                        "error_data": error_data,  # ← Full error
+                        "response_text": response.text[:1000]  # ← Raw response
+                    }
+                )
+                
             except:
                 error_message = response.text
             
