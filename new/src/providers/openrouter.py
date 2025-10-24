@@ -129,7 +129,7 @@ Your output MUST be the pure prompt with zero additional text."""
                 
                 # ✅ ADD THINKING MODE
                 "reasoning": {
-                    "effort": "medium"  # Medium for enhancement (faster)
+                    "effort": "high"  # High
                 },
                 
                 # ✅ LOCK PROVIDER
