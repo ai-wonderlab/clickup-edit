@@ -276,6 +276,21 @@ Return ONLY JSON."""
             }
             
             # ═══════════════════════════════════════════════════════════
+            # DEBUG LOGGING
+            # ═══════════════════════════════════════════════════════════
+            logger.error(
+                f"🔍 DEBUG VALIDATION REQUEST for {model_name}",
+                extra={
+                    "model": payload["model"],
+                    "original_size_kb": len(original_b64) * 0.75 / 1024,
+                    "edited_size_kb": len(edited_b64) * 0.75 / 1024,
+                    "system_prompt_length": len(system_prompt),
+                    "max_tokens": payload["max_tokens"],
+                    "has_reasoning": "reasoning" in payload
+                }
+            )
+            
+            # ═══════════════════════════════════════════════════════════
             # API CALL
             # ═══════════════════════════════════════════════════════════
             response = await self.client.post(
@@ -611,11 +626,12 @@ Return ONLY JSON."""
                 error_data = response.json()
                 error_message = error_data.get("error", {}).get("message", response.text)
                 
-                # ✅ ADD THIS LOGGING
+                # ✅ FULL ERROR DETAILS
                 logger.error(
-                    f"🔥 OpenRouter API Error - Status: {response.status_code}\n"
-                    f"Error Data: {json.dumps(error_data, indent=2)}\n"
-                    f"Response Text: {response.text[:1000]}"
+                    f"🔥 FULL ERROR DETAILS:\n"
+                    f"Status: {response.status_code}\n"
+                    f"Error: {json.dumps(error_data, indent=2)}\n"
+                    f"Raw: {response.text}"
                 )
                 
             except:
