@@ -57,7 +57,14 @@ class OpenRouterClient(BaseProvider):
             # ═══════════════════════════════════════════════════════════
             # SYSTEM PROMPT = Entire deep research (activation + research)
             # ═══════════════════════════════════════════════════════════
-            system_prompt = deep_research  # ~8K tokens
+            system_prompt = deep_research + """
+
+═══════════════════════════════════════════════════════════════
+FINAL OUTPUT OVERRIDE:
+═══════════════════════════════════════════════════════════════
+Ignore any instructions above about warnings, recommendations, or alternatives.
+Output ONLY the enhanced prompt. No meta-commentary. No markdown headers.
+Just the pure editing instructions."""
             
             # ═══════════════════════════════════════════════════════════
             # USER PROMPT = Simple enhancement request
@@ -66,7 +73,16 @@ class OpenRouterClient(BaseProvider):
 
 {original_prompt}
 
-Output: Enhanced prompt only."""
+CRITICAL OUTPUT REQUIREMENTS:
+- Return ONLY the enhanced prompt text ready for direct API submission
+- NO explanations, warnings, recommendations, or meta-commentary
+- NO "IMPORTANT", "CRITICAL", "RECOMMENDED", or markdown sections
+- NO confidence levels, success predictions, or alternative approaches
+- NO anti-pattern warnings or hybrid workflow suggestions
+- Start immediately with the actual prompt instructions
+- Output must be copy-paste ready for the image editing API
+
+Your output MUST be the pure prompt with zero additional text."""
             
             # ═══════════════════════════════════════════════════════════
             # BUILD USER CONTENT (text + optional image)
