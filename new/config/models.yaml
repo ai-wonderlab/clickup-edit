@@ -1,8 +1,8 @@
 image_models:
-  - name: seedream-v4
-    provider: wavespeed
-    priority: 1
-    supports_greek: true
+  # - name: seedream-v4
+  #   provider: wavespeed
+  #   priority: 1
+  #   supports_greek: true
   # - name: qwen-edit-plus
   #   provider: wavespeed
   #   priority: 2
