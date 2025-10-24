@@ -268,11 +268,6 @@ Return ONLY JSON."""
                 "max_tokens": 2000,
                 # temperature removed - defaults to 1.0 (required for thinking)
                 
-                # ✅ ADD THINKING MODE
-                "reasoning": {
-                    "effort": "medium"  # High effort for validation (accuracy critical)
-                },
-                
                 # ✅ LOCK PROVIDER (prevent fallbacks)
                 "provider": {
                     "order": ["Anthropic"],
