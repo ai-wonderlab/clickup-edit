@@ -234,7 +234,7 @@ Return ONLY JSON."""
             edited_png_buffer = io.BytesIO()
             edited_img.save(edited_png_buffer, format='PNG')
             edited_png_bytes = edited_png_buffer.getvalue()
-
+            logger.info("lets go man")
             edited_b64 = base64.b64encode(edited_png_bytes).decode('utf-8')
             edited_data_url = f"data:image/png;base64,{edited_b64}"
 
