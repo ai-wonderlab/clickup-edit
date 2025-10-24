@@ -108,7 +108,7 @@ Output: Enhanced prompt only."""
             payload = {
                 "model": "anthropic/claude-sonnet-4.5",
                 "messages": messages,
-                "max_tokens": 8000,
+                "max_tokens": 2000,
                 # temperature removed - defaults to 1.0 (required for thinking)
                 
                 # ✅ ADD THINKING MODE
@@ -265,12 +265,12 @@ Return ONLY JSON."""
             payload = {
                 "model": "anthropic/claude-sonnet-4.5",
                 "messages": messages,
-                "max_tokens": 8000,
+                "max_tokens": 2000,
                 # temperature removed - defaults to 1.0 (required for thinking)
                 
                 # ✅ ADD THINKING MODE
                 "reasoning": {
-                    "effort": "high"  # High effort for validation (accuracy critical)
+                    "effort": "medium"  # High effort for validation (accuracy critical)
                 },
                 
                 # ✅ LOCK PROVIDER (prevent fallbacks)
