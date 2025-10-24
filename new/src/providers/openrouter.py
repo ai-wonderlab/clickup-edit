@@ -281,6 +281,10 @@ Return ONLY JSON."""
                 "messages": messages,
                 "max_tokens": 2000,
                 # temperature removed - defaults to 1.0 (required for thinking)
+
+                "reasoning": {
+                    "effort": "high"
+                },
                 
                 # ✅ LOCK PROVIDER (prevent fallbacks)
                 "provider": {
