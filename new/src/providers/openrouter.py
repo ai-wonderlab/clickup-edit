@@ -613,12 +613,9 @@ Return ONLY JSON."""
                 
                 # ✅ ADD THIS LOGGING
                 logger.error(
-                    "Full OpenRouter error response",
-                    extra={
-                        "status_code": response.status_code,
-                        "error_data": error_data,  # ← Full error
-                        "response_text": response.text[:1000]  # ← Raw response
-                    }
+                    f"🔥 OpenRouter API Error - Status: {response.status_code}\n"
+                    f"Error Data: {json.dumps(error_data, indent=2)}\n"
+                    f"Response Text: {response.text[:1000]}"
                 )
                 
             except:
