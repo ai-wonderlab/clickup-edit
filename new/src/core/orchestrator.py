@@ -18,6 +18,7 @@ from ..models.schemas import (
 from ..models.enums import ProcessStatus
 from ..utils.logger import get_logger
 from ..utils.errors import AllEnhancementsFailed, AllGenerationsFailed
+from ..utils.config import Config
 
 logger = get_logger(__name__)
 
@@ -33,6 +34,7 @@ class Orchestrator:
         refiner: Refiner,
         hybrid_fallback: HybridFallback,
         max_iterations: int = 3,
+        config: Config = None,
     ):
         """
         Initialize orchestrator.
@@ -51,6 +53,13 @@ class Orchestrator:
         self.refiner = refiner
         self.hybrid_fallback = hybrid_fallback
         self.max_iterations = max_iterations
+
+        if config:
+            self.MAX_STEP_ATTEMPTS = config.max_step_attempts
+            self.PASS_THRESHOLD = config.validation_pass_threshold
+        else:
+            self.MAX_STEP_ATTEMPTS = 2
+            self.PASS_THRESHOLD = 8
     
     def select_best_result(
         self,
@@ -282,7 +291,8 @@ class Orchestrator:
                             steps=steps,
                             original_image_url=original_image_url,
                             original_image_bytes=original_image_bytes,
-                            task_id=task_id
+                            task_id=task_id,
+                            max_step_attempts=self.MAX_STEP_ATTEMPTS,
                         )
                         
                         if final_image:

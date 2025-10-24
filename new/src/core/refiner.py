@@ -192,7 +192,8 @@ class Refiner:
         steps: List[str],
         original_image_url: str,
         original_image_bytes: bytes,
-        task_id: str
+        task_id: str,
+        max_step_attempts: int = 2
     ) -> Optional[GeneratedImage]:
         """
         Execute steps sequentially - each step:
@@ -229,115 +230,154 @@ class Refiner:
             logger.info(f"📝 Operation: {step}")
             logger.info(f"📌 Base image: {'original' if i == 1 else f'result from step {i-1}'}")
             
-            try:
-                # PHASE 1: Full enhancement with deep research (ALL models)
-                logger.info(f"Phase 1: Enhancing step {i} for ALL models...")
+            # ✅ NEW: Retry loop for this step
+            step_succeeded = False
+            best_image = None
+            previous_failures = []
+            
+            for attempt in range(1, max_step_attempts + 1):
+                logger.info(f"📍 Step {i} attempt {attempt}/{max_step_attempts}")
                 
-                enhanced = await self.enhancer.enhance_all_parallel(
-                    original_prompt=step,
-                    original_image_url=current_image_url,
-                    original_image_bytes=current_image_bytes,
-                    include_image=True  # Include image for context
-                )
-                
-                logger.info(
-                    f"✅ Enhanced for {len(enhanced)} models",
-                    extra={"models": [e.model_name for e in enhanced]}
-                )
-                
-                # PHASE 2: Generate with ALL models in parallel
-                logger.info(f"Phase 2: Generating with {len(enhanced)} models...")
-                
-                generated = await self.generator.generate_all_parallel(
-                    enhanced,
-                    current_image_url
-                )
-                
-                logger.info(
-                    f"✅ Generated {len(generated)} images",
-                    extra={"models": [g.model_name for g in generated]}
-                )
-                
-                # PHASE 3: Validate all results
-                logger.info(f"Phase 3: Validating {len(generated)} results...")
-                
-                validated = await self.validator.validate_all_parallel(
-                    generated,
-                    step,
-                    original_image_bytes  # Always compare to original
-                )
-                
-                # Find best passing result
-                passing = [v for v in validated if v.passed]
-                
-                if passing:
-                    # Select highest scoring result
-                    best_validation = max(passing, key=lambda v: v.score)
-                    best_image = next(
-                        img for img in generated
-                        if img.model_name == best_validation.model_name
-                    )
+                try:
+                    # Prepare prompt (with feedback on retry)
+                    current_step_prompt = step
+                    if attempt > 1 and previous_failures:
+                        # Add feedback from previous attempt
+                        feedback = self.aggregate_feedback(previous_failures)
+                        current_step_prompt = f"{step}\n\n{feedback}"
+                        logger.info(f"🔄 Retrying with feedback from {len(previous_failures)} failures")
                     
-                    step_duration = time.time() - step_start
+                    # PHASE 1: Full enhancement with deep research (ALL models)
+                    logger.info(f"Phase 1: Enhancing step {i} for ALL models...")
+                    
+                    enhanced = await self.enhancer.enhance_all_parallel(
+                        original_prompt=current_step_prompt,
+                        original_image_url=current_image_url,
+                        original_image_bytes=current_image_bytes,
+                        include_image=True
+                    )
                     
                     logger.info(
-                        f"✅ STEP {i} PASSED",
-                        extra={
-                            "model": best_validation.model_name,
-                            "score": best_validation.score,
-                            "duration": f"{step_duration:.1f}s"
-                        }
+                        f"✅ Enhanced for {len(enhanced)} models",
+                        extra={"models": [e.model_name for e in enhanced]}
                     )
+                    
+                    # PHASE 2: Generate with ALL models in parallel
+                    logger.info(f"Phase 2: Generating with {len(enhanced)} models...")
+                    
+                    generated = await self.generator.generate_all_parallel(
+                        enhanced,
+                        current_image_url
+                    )
+                    
                     logger.info(
-                        f"🏆 Best: {best_validation.model_name} "
-                        f"with score {best_validation.score}/10"
+                        f"✅ Generated {len(generated)} images",
+                        extra={"models": [g.model_name for g in generated]}
                     )
                     
-                    # Use this result as input for next step
-                    current_image_url = best_image.temp_url
-                    current_image_bytes = best_image.image_bytes
+                    # PHASE 3: Validate all results
+                    logger.info(f"Phase 3: Validating {len(generated)} results...")
                     
-                    # Store final result for last step
-                    if i == len(steps):
-                        logger.info("")
-                        logger.info("=" * 80)
-                        logger.info("🎉 ALL SEQUENTIAL STEPS COMPLETED SUCCESSFULLY!")
-                        logger.info("=" * 80)
-                        return best_image
-                
-                else:
-                    # No passing results for this step
-                    best_score = max((v.score for v in validated), default=0)
-                    
-                    logger.error(
-                        f"❌ STEP {i} FAILED - No passing results",
-                        extra={
-                            "best_score": best_score,
-                            "attempts": len(validated)
-                        }
+                    validated = await self.validator.validate_all_parallel(
+                        generated,
+                        step,
+                        original_image_bytes
                     )
                     
-                    # Log all failures
-                    for v in validated:
-                        logger.error(
-                            f"  • {v.model_name}: {v.score}/10 - {v.issues}"
+                    # Find best passing result
+                    passing = [v for v in validated if v.passed]
+                    
+                    if passing:
+                        # ✅ SUCCESS! Select highest scoring result
+                        best_validation = max(passing, key=lambda v: v.score)
+                        best_image = next(
+                            img for img in generated
+                            if img.model_name == best_validation.model_name
                         )
+                        
+                        step_duration = time.time() - step_start
+                        
+                        logger.info(
+                            f"✅ STEP {i} PASSED on attempt {attempt}",
+                            extra={
+                                "model": best_validation.model_name,
+                                "score": best_validation.score,
+                                "duration": f"{step_duration:.1f}s"
+                            }
+                        )
+                        logger.info(
+                            f"🏆 Best: {best_validation.model_name} "
+                            f"with score {best_validation.score}/10"
+                        )
+                        
+                        step_succeeded = True
+                        break  # Exit retry loop, proceed to next step
                     
-                    logger.error("")
-                    logger.error("=" * 80)
-                    logger.error(f"💥 SEQUENTIAL MODE FAILED AT STEP {i}/{len(steps)}")
-                    logger.error("=" * 80)
-                    
-                    return None
+                    else:
+                        # Failed this attempt
+                        best_score = max((v.score for v in validated), default=0)
+                        
+                        logger.warning(
+                            f"⚠️ Step {i} attempt {attempt}/{max_step_attempts} failed",
+                            extra={
+                                "best_score": best_score,
+                                "attempts": len(validated)
+                            }
+                        )
+                        
+                        # Log failures
+                        for v in validated:
+                            logger.warning(f"  • {v.model_name}: {v.score}/10 - {v.issues}")
+                        
+                        # Store failures for next retry
+                        previous_failures = validated
+                        
+                        # Check if should retry
+                        if attempt >= max_step_attempts:
+                            # All attempts exhausted
+                            logger.error(
+                                f"❌ STEP {i} FAILED after {max_step_attempts} attempts"
+                            )
+                            logger.error("")
+                            logger.error("=" * 80)
+                            logger.error(f"💥 SEQUENTIAL MODE FAILED AT STEP {i}/{len(steps)}")
+                            logger.error("=" * 80)
+                            return None
+                        else:
+                            # Will retry
+                            logger.info(f"🔄 Retrying step {i}...")
+                            continue
                 
-            except Exception as e:
-                logger.error(
-                    f"❌ Exception in sequential step {i}: {e}",
-                    extra={"error": str(e)},
-                    exc_info=True
-                )
+                except Exception as e:
+                    logger.error(
+                        f"❌ Exception in sequential step {i} attempt {attempt}: {e}",
+                        extra={"error": str(e)},
+                        exc_info=True
+                    )
+                    
+                    if attempt >= max_step_attempts:
+                        return None
+                    else:
+                        logger.info(f"🔄 Retrying after exception...")
+                        continue
+            
+            # Check if step succeeded
+            if not step_succeeded or not best_image:
+                logger.error(f"Step {i} failed after all attempts")
                 return None
-        
+            
+            # Use this result as input for next step
+            current_image_url = best_image.temp_url
+            current_image_bytes = best_image.image_bytes
+            
+            # If this was the last step, return the result
+            if i == len(steps):
+                logger.info("")
+                logger.info("=" * 80)
+                logger.info("🎉 ALL SEQUENTIAL STEPS COMPLETED SUCCESSFULLY!")
+                logger.info("=" * 80)
+                return best_image
+       
         # Should not reach here
         logger.error("Sequential execution completed but no final result")
         return None

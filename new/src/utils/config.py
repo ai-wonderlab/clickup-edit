@@ -69,6 +69,9 @@ class Config(BaseModel):
     app_env: str = Field(default="development", alias="APP_ENV")
     log_level: str = Field(default="INFO", alias="LOG_LEVEL")
     max_iterations: int = Field(default=3, alias="MAX_ITERATIONS")
+
+    max_step_attempts: int = Field(default=2, alias="MAX_STEP_ATTEMPTS")
+    validation_pass_threshold: int = Field(default=8, alias="VALIDATION_PASS_THRESHOLD")
     
     # Model Configuration
     image_models: list[ModelConfig] = []
