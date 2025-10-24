@@ -1,8 +1,8 @@
 image_models:
-  # - name: seedream-v4
-  #   provider: wavespeed
-  #   priority: 1
-  #   supports_greek: true
+  - name: seedream-v4
+    provider: wavespeed
+    priority: 1
+    supports_greek: true
   # - name: qwen-edit-plus
   #   provider: wavespeed
   #   priority: 2
@@ -11,10 +11,10 @@ image_models:
     provider: wavespeed
     priority: 3
     supports_greek: true
-  # - name: nano-banana
-  #   provider: wavespeed
-  #   priority: 4
-  #   supports_greek: true
+  - name: nano-banana
+    provider: wavespeed
+    priority: 4
+    supports_greek: true
 
 enhancement:
   model: anthropic/claude-sonnet-4.5

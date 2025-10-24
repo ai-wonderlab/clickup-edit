@@ -258,6 +258,51 @@ class Orchestrator:
                         processing_time_seconds=processing_time,
                     )
                 
+                # ========================================================
+                # NEW: Check if we should switch to SEQUENTIAL mode
+                # ========================================================
+                if iteration >= 3:
+                    # Failed 3 times - try sequential breakdown
+                    logger.warning(
+                        f"Failed {iteration} iterations - switching to SEQUENTIAL mode",
+                        extra={"task_id": task_id}
+                    )
+                    
+                    # Parse request into steps
+                    steps = self.refiner.parse_request_into_steps(prompt)
+                    
+                    if len(steps) > 1:
+                        logger.info(
+                            f"🔗 Breaking request into {len(steps)} sequential operations",
+                            extra={"steps": steps}
+                        )
+                        
+                        # Execute sequentially
+                        final_image = await self.refiner.execute_sequential(
+                            steps=steps,
+                            original_image_url=original_image_url,
+                            original_image_bytes=original_image_bytes,
+                            task_id=task_id
+                        )
+                        
+                        if final_image:
+                            processing_time = time.time() - start_time
+                            
+                            return ProcessResult(
+                                status=ProcessStatus.SUCCESS,
+                                final_image=final_image,
+                                iterations=iteration,
+                                model_used=f"{final_image.model_name} (sequential)",
+                                all_results=all_validation_results,
+                                processing_time_seconds=processing_time,
+                            )
+                        else:
+                            logger.error("Sequential mode also failed")
+                            # Continue to hybrid fallback
+                            break
+                    else:
+                        logger.info("Request is single operation - cannot break down further")
+                
                 # No passing results - refine if iterations remaining
                 if iteration < self.max_iterations:
                     logger.info(
