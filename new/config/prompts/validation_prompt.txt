@@ -42,6 +42,11 @@ User's edit request:
    • Partial implementation = FAIL
    • Wrong implementation = FAIL
 
+5. LOGO CHECK:
+- Visual inspection: Shape intact? Not warped/merged/distorted?
+- Compare carefully: Original logo shape vs edited logo shape
+- Letter forms: Individual letters properly formed? (not merged/malformed)
+- Even if positioned correctly, distorted logo = FAIL
 ═══════════════════════════════════════════════════════════════
 
 VALIDATION PROTOCOL:
