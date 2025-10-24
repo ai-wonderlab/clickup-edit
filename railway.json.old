@@ -1,0 +1,36 @@
+{
+  "$schema": "https://railway.app/railway.schema.json",
+  "build": {
+    "builder": "NIXPACKS"
+  },
+  "deploy": {
+    "numReplicas": 1,
+    "restartPolicyType": "ON_FAILURE",
+    "restartPolicyMaxRetries": 3
+  },
+  "services": [
+    {
+      "name": "web",
+      "source": ".",
+      "startCommand": "python app.py",
+      "healthcheck": {
+        "path": "/health",
+        "port": 5000
+      }
+    },
+    {
+      "name": "worker",
+      "source": ".",
+      "startCommand": "celery -A celery_config worker --loglevel=info"
+    },
+    {
+      "name": "proxy",
+      "source": ".",
+      "startCommand": "python proxy_server.py",
+      "healthcheck": {
+        "path": "/health",
+        "port": 5001
+      }
+    }
+  ]
+}

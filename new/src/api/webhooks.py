@@ -106,7 +106,7 @@ def verify_signature(payload_body: bytes, signature: str, secret: str) -> bool:
 
 async def get_orchestrator(request: Request):
     """Dependency to get active orchestrator from app state."""
-    return request.app.state.active_orchestrator  # 🎯 Uses feature flag
+    return request.app.state.orchestrator  # 🎯 Uses feature flag
 
 
 async def get_clickup_client(request: Request):
@@ -436,33 +436,13 @@ async def process_edit_request(
         # Process with iterations (ENTIRE WORKFLOW)
         logger.info("Starting orchestration", extra={"task_id": task_id})
         
-        # Check which orchestrator we're using
-        if hasattr(orchestrator, 'process_with_smart_retry'):
-            # New orchestrator
-            result = await orchestrator.process_with_smart_retry(
-                task_id=task_id,
-                prompt=prompt,
-                original_image_url=original_url,
-                original_image_bytes=png_bytes
-            )
-        else:
-            # Old orchestrator
-            if hasattr(orchestrator, 'process_with_smart_retry'):
-                # New orchestrator
-                result = await orchestrator.process_with_smart_retry(
-                    task_id=task_id,
-                    prompt=prompt,
-                    original_image_url=original_url,
-                    original_image_bytes=png_bytes
-                )
-            else:
-                # Old orchestrator (fallback)
-                result = await orchestrator.process_with_iterations(
-                    task_id=task_id,
-                    prompt=prompt,
-                    original_image_url=original_url,
-                    original_image_bytes=png_bytes
-                )
+        # Process with old orchestrator
+        result = await orchestrator.process_with_iterations(
+            task_id=task_id,
+            prompt=prompt,
+            original_image_url=original_url,
+            original_image_bytes=png_bytes
+        )
         
         # Handle result
         if result.status == "success":

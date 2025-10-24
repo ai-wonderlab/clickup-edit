@@ -1,42 +1,75 @@
 """
-Celery Configuration for ClickUp Image Editor
-Handles background processing with Redis
+Celery configuration for async task processing
 """
 from celery import Celery
-import os
+from config import config
+import logging
 
-# Redis URL from environment or default
-REDIS_URL = os.getenv('REDIS_URL', 'redis://localhost:6379/0')
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
-# Initialize Celery
+# Create Celery instance
 celery = Celery(
     'clickup_tasks',
-    broker=REDIS_URL,
-    backend=REDIS_URL
+    broker=config.CELERY_BROKER_URL,
+    backend=config.CELERY_RESULT_BACKEND
 )
 
-# Celery Configuration
+# Celery configuration
 celery.conf.update(
+    # Task configuration
     task_serializer='json',
     accept_content=['json'],
     result_serializer='json',
     timezone='UTC',
     enable_utc=True,
     
-    # Performance settings
-    worker_prefetch_multiplier=1,  # Process one task at a time per worker
-    task_acks_late=True,  # Acknowledge task after completion
-    task_reject_on_worker_lost=True,
+    # Worker configuration
+    worker_prefetch_multiplier=1,  # Only fetch 1 task at a time
+    worker_max_tasks_per_child=50,  # Restart worker after 50 tasks to prevent memory leaks
+    worker_disable_rate_limits=False,
     
-    # Retry settings
-    task_default_retry_delay=30,  # 30 seconds
-    task_max_retries=3,
+    # Task execution limits
+    task_soft_time_limit=300,  # 5 minutes soft limit
+    task_time_limit=600,  # 10 minutes hard limit
+    task_acks_late=True,  # Tasks acknowledged after completion
     
-    # Result expiration (24 hours)
-    result_expires=86400,
+    # Result backend settings
+    result_expires=3600,  # Results expire after 1 hour
+    
+    # Redis specific settings
+    broker_connection_retry_on_startup=True,
+    broker_connection_retry=True,
+    broker_connection_max_retries=10,
+    
+    # Task routing (if you want to use different queues)
+    # task_routes={
+    #     'tasks.process_clickup_task': {'queue': 'images'},
+    #     'tasks.generate_model_prompt': {'queue': 'prompts'},
+    # },
+    
+    # Beat schedule (if you need periodic tasks)
+    beat_schedule={
+        # Example: Clean up old tokens every hour
+        # 'cleanup-tokens': {
+        #     'task': 'tasks.cleanup_old_tokens',
+        #     'schedule': 3600.0,  # Every hour
+        # },
+    }
 )
 
-# Task routes (optional - for organizing tasks)
-# celery.conf.task_routes = {
-#     'tasks.process_clickup_task': {'queue': 'image_processing'},
-# }
+# Import tasks to register them
+# try:
+#     from tasks import process_clickup_task
+#     logger.info("✅ Tasks imported successfully")
+# except ImportError as e:
+#     logger.warning(f"⚠️ Could not import tasks: {e}")
+
+# Optional: Configure task error handling
+@celery.task(bind=True, max_retries=3)
+def debug_task(self):
+    """Debug task for testing Celery setup"""
+    print(f'Request: {self.request!r}')
+    return "pong"
+
+logger.info("✅ Celery configured successfully")
