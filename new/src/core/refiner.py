@@ -101,15 +101,20 @@ class Refiner:
             }
         )
         
-        # Create refined prompt with feedback incorporated
-        refined_prompt = f"{original_prompt}\n\n{feedback}"
+        # ✅ NEW: Keep original prompt CLEAN - do NOT append feedback
+        # Feedback is logged for debugging but NOT passed to models
+        refined_prompt = original_prompt  # Keep clean!
         
         logger.info(
-            "Refined prompt created",
-            extra={"refined_length": len(refined_prompt)}
+            "Refined prompt created (kept clean, feedback not appended)",
+            extra={
+                "refined_length": len(refined_prompt),
+                "has_feedback": bool(feedback),
+                "feedback_preview": feedback[:200] if feedback else "None"
+            }
         )
         
-        # Re-run full pipeline with refined prompt
+        # Re-run full pipeline with CLEAN prompt (no feedback contamination)
         enhanced = await self.enhancer.enhance_all_parallel(refined_prompt)
         
         generated = await self.generator.generate_all_parallel(
@@ -119,7 +124,7 @@ class Refiner:
         
         validated = await self.validator.validate_all_parallel(
             generated,
-            refined_prompt
+            refined_prompt  # ← Clean prompt here too!
         )
         
         logger.info(
@@ -136,7 +141,7 @@ class Refiner:
             enhanced=enhanced,
             generated=generated,
             validated=validated,
-            refined_prompt=refined_prompt,
+            refined_prompt=refined_prompt,  # Return clean prompt
         )
     
     def parse_request_into_steps(self, request: str) -> List[str]:
@@ -242,9 +247,14 @@ class Refiner:
                     # Prepare prompt (with feedback on retry)
                     current_step_prompt = step
                     if attempt > 1 and previous_failures:
-                        # Add feedback from previous attempt
+                        # ✅ NEW: Log feedback but DON'T append to prompt
                         feedback = self.aggregate_feedback(previous_failures)
-                        current_step_prompt = f"{step}\n\n{feedback}"
+                        logger.warning(
+                            f"🔄 Step retry with feedback (NOT added to prompt):",
+                            extra={"feedback": feedback}
+                        )
+                        # Keep prompt clean - let model improvement come from iteration, not feedback injection
+                        current_step_prompt = step  # ← Keep clean!
                         logger.info(f"🔄 Retrying with feedback from {len(previous_failures)} failures")
                     
                     # PHASE 1: Full enhancement with deep research (ALL models)
