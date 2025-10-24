@@ -217,14 +217,28 @@ Return ONLY JSON."""
             original_data_url = f"data:image/png;base64,{original_b64}"
             
             # Edited image: download from URL
+            # ✅ NEW CODE (WORKS):
+            # Edited image: download from URL and FORCE convert to PNG
             logger.info("📥 Downloading edited image for validation")
             async with httpx.AsyncClient(timeout=30.0) as download_client:
                 edited_response = await download_client.get(image_url)
                 edited_response.raise_for_status()
                 edited_bytes = edited_response.content
-            
-            edited_b64 = base64.b64encode(edited_bytes).decode('utf-8')
+
+            # ✅ FORCE CONVERT TO PNG (regardless of source format)
+            from PIL import Image
+            import io
+
+            logger.info("🔄 Converting edited image to PNG format")
+            edited_img = Image.open(io.BytesIO(edited_bytes))
+            edited_png_buffer = io.BytesIO()
+            edited_img.save(edited_png_buffer, format='PNG')
+            edited_png_bytes = edited_png_buffer.getvalue()
+
+            edited_b64 = base64.b64encode(edited_png_bytes).decode('utf-8')
             edited_data_url = f"data:image/png;base64,{edited_b64}"
+
+            logger.info(f"✅ Image converted: {len(edited_bytes)/1024:.1f}KB → {len(edited_png_bytes)/1024:.1f}KB PNG")
             
             logger.info("✅ Both images prepared for validation")
             
