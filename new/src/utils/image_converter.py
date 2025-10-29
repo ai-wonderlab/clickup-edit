@@ -29,13 +29,16 @@ class ImageConverter:
         """All supported formats."""
         return self.PILLOW_FORMATS | self.SPECIAL_FORMATS
     
-    async def convert_to_png(
+    def convert_to_png(
         self,
         file_bytes: bytes,
         filename: str
     ) -> Tuple[bytes, str]:
         """
         Convert any supported format to PNG.
+        
+        ⚠️ IMPORTANT: This is a BLOCKING synchronous operation.
+        Must be called via run_in_threadpool() in async contexts.
         
         Args:
             file_bytes: Raw file bytes
@@ -70,12 +73,12 @@ class ImageConverter:
         try:
             # Route to appropriate converter
             if extension == 'pdf':
-                png_bytes = await self._convert_pdf(file_bytes)
+                png_bytes = self._convert_pdf(file_bytes)
             elif extension == 'psd':
-                png_bytes = await self._convert_psd(file_bytes)
+                png_bytes = self._convert_psd(file_bytes)
             else:
                 # Standard Pillow conversion
-                png_bytes = await self._convert_raster(file_bytes, extension)
+                png_bytes = self._convert_raster(file_bytes, extension)
             
             # Generate new filename
             base_name = '.'.join(filename.split('.')[:-1])
@@ -107,7 +110,7 @@ class ImageConverter:
                 f"Failed to convert {extension.upper()} to PNG: {str(e)}"
             )
     
-    async def _convert_raster(self, file_bytes: bytes, extension: str) -> bytes:
+    def _convert_raster(self, file_bytes: bytes, extension: str) -> bytes:
         """
         Convert common raster formats using Pillow.
         
@@ -138,7 +141,7 @@ class ImageConverter:
                 f"Pillow conversion failed for {extension.upper()}: {str(e)}"
             )
     
-    async def _convert_pdf(self, file_bytes: bytes) -> bytes:
+    def _convert_pdf(self, file_bytes: bytes) -> bytes:
         """
         Convert first page of PDF to PNG using PyMuPDF.
         
@@ -178,7 +181,7 @@ class ImageConverter:
         except Exception as e:
             raise ImageConversionError(f"PDF conversion failed: {str(e)}")
     
-    async def _convert_psd(self, file_bytes: bytes) -> bytes:
+    def _convert_psd(self, file_bytes: bytes) -> bytes:
         """
         Convert PSD to PNG using psd-tools.
         

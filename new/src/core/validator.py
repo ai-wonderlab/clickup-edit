@@ -110,14 +110,20 @@ class Validator:
         """
         Validate ALL generated images SEQUENTIALLY with delays.
         
-        Changed from parallel to sequential to avoid rate limits with extended thinking.
+        ✅ IMPORTANT: This method no longer catches exceptions.
+        System errors (network, rate limit, etc.) will bubble up to orchestrator.
+        Only validation quality issues are returned as ValidationResult.
         
         Args:
             generated_images: List of generated images
             original_request: Original user edit request
+            original_image_bytes: Original image bytes
             
         Returns:
-            List of ValidationResult objects (includes failures as ERROR status)
+            List of ValidationResult objects (only quality assessments)
+            
+        Raises:
+            Exception: Any system error (network, API, parsing, etc.)
         """
         logger.info(
             f"Starting sequential validation for {len(generated_images)} images",
@@ -126,63 +132,50 @@ class Validator:
             }
         )
         
-        # Execute SEQUENTIALLY with delays between validations
-        results = []
+        # ✅ NEW: No try/except - let exceptions bubble
+        validation_results = []
+        
         for i, image in enumerate(generated_images):
-            logger.info(f"Validating image {i+1}/{len(generated_images)}: {image.model_name}")
+            logger.info(
+                f"Validating image {i+1}/{len(generated_images)}: {image.model_name}"
+            )
             
-            try:
-                result = await self.validate_single(image, original_request, original_image_bytes)
-                results.append(result)
-            except Exception as e:
-                # Store exception for later handling
-                results.append(e)
+            # Call validation - any exception bubbles up immediately
+            result = await self.validate_single(
+                image,
+                original_request,
+                original_image_bytes
+            )
+            
+            validation_results.append(result)
+            
+            logger.info(
+                f"Validation complete for {image.model_name}",
+                extra={
+                    "model": image.model_name,
+                    "passed": result.passed,
+                    "score": result.score,
+                }
+            )
             
             # Add delay between validations (except after last one)
             if i < len(generated_images) - 1:
-                delay = 2  # 2 seconds between validations
-                logger.info(f"⏱️ Waiting {delay} seconds before next validation (avoid rate limits)")
+                # ✅ NEW: Use config value
+                from ..utils.config import get_config
+                config = get_config()
+                delay = config.validation_delay_seconds
+                
+                logger.info(
+                    f"⏱️ Waiting {delay} seconds before next validation (avoid rate limits)"
+                )
                 await asyncio.sleep(delay)
         
-        # Separate successes from failures
-        validation_results = []
-        successful = 0
-        failed = 0
-        
-        for i, result in enumerate(results):
-            model_name = generated_images[i].model_name
-            
-            if isinstance(result, Exception):
-                print(f"\n🔴 VALIDATION EXCEPTION for {model_name}: {type(result).__name__}: {str(result)}")
-                logger.error(
-                    f"Validation error for {model_name}: {type(result).__name__}: {str(result)}",
-                    extra={
-                        "model": model_name,
-                        "error": str(result),
-                        "error_type": type(result).__name__,
-                    }
-                )
-                # Create failed validation result
-                validation_results.append(
-                    ValidationResult(
-                        model_name=model_name,
-                        passed=False,
-                        score=0,
-                        issues=[f"Validation error: {str(result)}"],
-                        reasoning="Validation process failed",
-                        status="error",
-                    )
-                )
-                failed += 1
-            else:
-                validation_results.append(result)
-                if result.passed:
-                    successful += 1
-                else:
-                    failed += 1
+        # Calculate success statistics
+        successful = sum(1 for r in validation_results if r.passed)
+        failed = len(validation_results) - successful
         
         logger.info(
-            f"Parallel validation complete: {successful} passed, {failed} failed/errored",
+            f"Sequential validation complete: {successful} passed, {failed} failed",
             extra={
                 "total": len(generated_images),
                 "passed": successful,

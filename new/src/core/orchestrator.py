@@ -192,13 +192,43 @@ class Orchestrator:
                 
                 # Phase 3: Parallel Validation
                 logger.info("Phase 3: Validation", extra={"iteration": iteration})
-                validated = await self.validator.validate_all_parallel(
-                    generated,
-                    current_prompt,
-                    original_image_bytes  # ✅ Pass bytes
-                )
                 
-                all_validation_results.extend(validated)
+                try:
+                    validated = await self.validator.validate_all_parallel(
+                        generated,
+                        current_prompt,
+                        original_image_bytes  # ✅ Pass bytes
+                    )
+                    
+                    all_validation_results.extend(validated)
+                    
+                except Exception as validation_error:
+                    # ✅ NEW: Distinguish validation system errors from quality failures
+                    logger.error(
+                        f"Validation system error in iteration {iteration}",
+                        extra={
+                            "task_id": task_id,
+                            "iteration": iteration,
+                            "error": str(validation_error),
+                            "error_type": type(validation_error).__name__,
+                        },
+                        exc_info=True
+                    )
+                    
+                    # If this was the last iteration, fail
+                    if iteration == self.max_iterations:
+                        logger.error(
+                            f"Validation failed in final iteration, triggering hybrid fallback",
+                            extra={"task_id": task_id}
+                        )
+                        break
+                    
+                    # Otherwise, retry next iteration
+                    logger.warning(
+                        f"Validation failed, retrying iteration {iteration + 1}",
+                        extra={"task_id": task_id, "iteration": iteration}
+                    )
+                    continue
                 
                 # Record iteration metrics
                 iteration_metrics = IterationMetrics(

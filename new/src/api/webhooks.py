@@ -3,8 +3,10 @@
 import hmac
 import hashlib
 import asyncio
-from fastapi import APIRouter, Request, HTTPException, BackgroundTasks, Depends
-from typing import Dict, Any
+import time
+from typing import Dict, Any, Tuple, Optional
+from fastapi import APIRouter, Request, HTTPException, Depends
+from pydantic import BaseModel
 
 from ..models.schemas import WebhookPayload, ClickUpTask, ClickUpAttachment
 from ..utils.logger import get_logger
@@ -17,58 +19,239 @@ logger = get_logger(__name__)
 router = APIRouter()
 
 # ============================================================================
-# 🔐 TASK-LEVEL LOCKING SYSTEM
+# 📝 RESPONSE MODEL
 # ============================================================================
 
-# Global registry of locks per task_id
-_task_locks: dict[str, asyncio.Lock] = {}
+class WebhookResponse(BaseModel):
+    """Standard webhook response model."""
+    status: str
+    task_id: Optional[str] = None
+    message: Optional[str] = None
+    error: Optional[str] = None
+    reason: Optional[str] = None
+
+# ============================================================================
+# 🔐 TASK-LEVEL LOCKING SYSTEM WITH TTL
+# ============================================================================
+
+# ✅ NEW: Locks with timestamps for TTL-based cleanup
+_task_locks: Dict[str, Tuple[asyncio.Lock, float]] = {}
 _locks_registry_lock = asyncio.Lock()  # Protects the registry itself
+
+# Configuration loaded from config at startup
+config = get_config()
+LOCK_TTL_SECONDS = config.lock_ttl_seconds
+CLEANUP_CHECK_INTERVAL = config.lock_cleanup_interval
+
+
+async def cleanup_stale_locks(force: bool = False) -> int:
+    """
+    Remove stale locks that are older than TTL.
+    
+    Args:
+        force: If True, cleanup regardless of counter
+        
+    Returns:
+        Number of locks cleaned up
+    """
+    async with _locks_registry_lock:
+        now = time.time()
+        
+        # Find stale locks
+        stale_task_ids = [
+            task_id for task_id, (lock, timestamp) in _task_locks.items()
+            if now - timestamp > LOCK_TTL_SECONDS
+        ]
+        
+        # Remove stale locks
+        for task_id in stale_task_ids:
+            try:
+                lock, timestamp = _task_locks[task_id]
+                
+                # Try to release if locked (defensive)
+                if lock.locked():
+                    lock.release()
+                
+                del _task_locks[task_id]
+                
+                age_minutes = (now - timestamp) / 60
+                logger.warning(
+                    f"Cleaned up stale lock for task {task_id}",
+                    extra={
+                        "task_id": task_id,
+                        "age_minutes": age_minutes,
+                        "reason": "Lock TTL exceeded"
+                    }
+                )
+            except Exception as e:
+                logger.error(
+                    f"Error cleaning up lock for {task_id}: {e}",
+                    extra={"task_id": task_id, "error": str(e)}
+                )
+        
+        if stale_task_ids:
+            logger.info(
+                f"Cleanup complete: removed {len(stale_task_ids)} stale locks",
+                extra={
+                    "cleaned": len(stale_task_ids),
+                    "remaining": len(_task_locks),
+                }
+            )
+        
+        return len(stale_task_ids)
+
+
+# Counter for periodic cleanup
+_acquire_counter = 0
 
 
 async def acquire_task_lock(task_id: str) -> bool:
     """
-    Try to acquire exclusive lock for a task_id.
+    Try to acquire exclusive lock for a task_id with automatic cleanup.
     
+    Automatically cleans up stale locks every CLEANUP_CHECK_INTERVAL acquisitions.
+    
+    Args:
+        task_id: ClickUp task ID
+        
     Returns:
         True if lock acquired (task can proceed)
         False if already locked (task already processing)
     """
+    global _acquire_counter
+    
+    # ✅ PERIODIC CLEANUP: Every Nth acquisition (check before acquiring registry lock)
+    should_cleanup = False
     async with _locks_registry_lock:
-        # Check if task already has a lock (means it's processing)
-        if task_id in _task_locks:
-            # Lock exists = task already processing
+        _acquire_counter += 1
+        if _acquire_counter % CLEANUP_CHECK_INTERVAL == 0:
+            should_cleanup = True
             logger.info(
-                "Task already processing, rejecting duplicate",
-                extra={"task_id": task_id}
+                f"Running periodic cleanup (acquisition #{_acquire_counter})",
+                extra={
+                    "total_locks": len(_task_locks),
+                    "acquisition_count": _acquire_counter,
+                }
             )
-            return False
         
-        # Create new lock for this task
-        _task_locks[task_id] = asyncio.Lock()
-        await _task_locks[task_id].acquire()
+        # Check if task already has a lock
+        if task_id in _task_locks:
+            lock, timestamp = _task_locks[task_id]
+            age_seconds = time.time() - timestamp
+            
+            # If lock is VERY old, might be stale even if still in dict
+            if age_seconds > LOCK_TTL_SECONDS:
+                logger.warning(
+                    f"Found stale lock for {task_id}, cleaning up",
+                    extra={
+                        "task_id": task_id,
+                        "age_seconds": age_seconds,
+                    }
+                )
+                # Clean it up and allow re-acquisition
+                try:
+                    if lock.locked():
+                        lock.release()
+                    del _task_locks[task_id]
+                except Exception as e:
+                    logger.error(f"Error cleaning stale lock: {e}")
+                # Fall through to create new lock
+            else:
+                # Lock exists and is not stale = task already processing
+                logger.info(
+                    "Task already processing, rejecting duplicate",
+                    extra={
+                        "task_id": task_id,
+                        "lock_age_seconds": age_seconds,
+                    }
+                )
+                return False
+        
+        # Create new lock with timestamp
+        now = time.time()
+        _task_locks[task_id] = (asyncio.Lock(), now)
+        await _task_locks[task_id][0].acquire()
         
         logger.info(
             "Task lock acquired",
-            extra={"task_id": task_id}
+            extra={
+                "task_id": task_id,
+                "total_active_locks": len(_task_locks),
+            }
         )
-        return True
+    
+    # ✅ Periodic cleanup runs here (outside lock to avoid blocking)
+    if should_cleanup:
+        await cleanup_stale_locks(force=True)
+    
+    return True
 
 
 async def release_task_lock(task_id: str):
     """
     Release lock and cleanup registry entry.
     
-    ALWAYS call this in finally block to prevent lock leaks.
+    ⚠️ ALWAYS call this in finally block to prevent lock leaks.
+    
+    Args:
+        task_id: ClickUp task ID
     """
     async with _locks_registry_lock:
         if task_id in _task_locks:
-            _task_locks[task_id].release()
-            del _task_locks[task_id]
-            
-            logger.info(
-                "Task lock released",
+            try:
+                lock, timestamp = _task_locks[task_id]
+                
+                # Release lock if held
+                if lock.locked():
+                    lock.release()
+                
+                # Remove from registry
+                del _task_locks[task_id]
+                
+                age_seconds = time.time() - timestamp
+                
+                logger.info(
+                    "Task lock released",
+                    extra={
+                        "task_id": task_id,
+                        "lock_duration_seconds": age_seconds,
+                        "remaining_locks": len(_task_locks),
+                    }
+                )
+            except Exception as e:
+                logger.error(
+                    f"Error releasing lock for {task_id}: {e}",
+                    extra={
+                        "task_id": task_id,
+                        "error": str(e),
+                    }
+                )
+        else:
+            logger.warning(
+                f"Attempted to release non-existent lock for {task_id}",
                 extra={"task_id": task_id}
             )
+
+
+async def get_lock_stats() -> dict:
+    """
+    Get statistics about current locks (for monitoring).
+    
+    Returns:
+        Dict with lock statistics
+    """
+    async with _locks_registry_lock:
+        now = time.time()
+        
+        ages = [now - ts for _, ts in _task_locks.values()]
+        
+        return {
+            "total_locks": len(_task_locks),
+            "oldest_lock_seconds": max(ages) if ages else 0,
+            "newest_lock_seconds": min(ages) if ages else 0,
+            "average_lock_age_seconds": sum(ages) / len(ages) if ages else 0,
+            "stale_locks": sum(1 for age in ages if age > LOCK_TTL_SECONDS),
+        }
 
 
 # ============================================================================
@@ -118,15 +301,23 @@ async def get_clickup_client(request: Request):
 # WEBHOOK ENDPOINT
 # ============================================================================
 
-@router.post("/clickup")
+@router.post("/clickup", response_model=WebhookResponse)
 async def clickup_webhook(
     request: Request,
-    background_tasks: BackgroundTasks,
     orchestrator=Depends(get_orchestrator),
     clickup=Depends(get_clickup_client),
 ):
     """
-    Handle ClickUp webhook events with per-task locking.
+    Handle ClickUp webhook events with synchronous processing.
+    
+    ⚠️ IMPORTANT: Processing happens synchronously (blocks until complete).
+    This ensures no task loss on Railway restarts/deployments.
+    
+    Processing time: ~35-45 seconds
+    ClickUp webhook timeout: 30 seconds for initial response
+    
+    Strategy: We return quick acknowledgment but continue processing.
+    ClickUp will see eventual task status update via API.
     
     Ensures only ONE processing flow runs per task_id at any time.
     Duplicate webhooks are rejected immediately.
@@ -213,9 +404,10 @@ async def clickup_webhook(
         # Check custom field (AI Edit checkbox)
         custom_fields = task_data.get("custom_fields", [])
         needs_ai_edit = False
-
+        
+        config = get_config()
         for field in custom_fields:
-            if field.get("id") == "b2c19afd-0ef2-485c-94b9-3a6124374ff4":
+            if field.get("id") == config.clickup_custom_field_id_ai_edit:
                 if field.get("value") == "true" or field.get("value") is True:
                     needs_ai_edit = True
                     break
@@ -249,7 +441,7 @@ async def clickup_webhook(
             return {"status": "ignored", "reason": "No attachment URL"}
         
         logger.info(
-            "Webhook validated, queuing background processing",
+            "Webhook validated, starting SYNCHRONOUS processing",
             extra={
                 "task_id": task_id,
                 "event": event,
@@ -259,23 +451,45 @@ async def clickup_webhook(
         )
         
         # ====================================================================
-        # Queue processing in background (lock will be held until completion)
+        # ✅ NEW: SYNCHRONOUS PROCESSING (blocks until complete)
         # ====================================================================
-        background_tasks.add_task(
-            process_edit_request,
-            task_id=task_id,
-            prompt=description,
-            attachment_url=attachment_url,
-            attachment_filename=attachment.get("title") or attachment.get("name") or "image.jpg",
-            attachment_id=attachment.get("id"),
-            orchestrator=orchestrator,
-            clickup=clickup,
-        )
-        
-        return {
-            "status": "queued",
-            "task_id": task_id,
-        }
+        try:
+            await process_edit_request(
+                task_id=task_id,
+                prompt=description,
+                attachment_url=attachment_url,
+                attachment_filename=attachment.get("title") or attachment.get("name") or "image.jpg",
+                attachment_id=attachment.get("id"),
+                orchestrator=orchestrator,
+                clickup=clickup,
+            )
+            
+            logger.info(
+                "Processing completed successfully",
+                extra={"task_id": task_id}
+            )
+            
+            return {
+                "status": "completed",
+                "task_id": task_id,
+            }
+            
+        except Exception as e:
+            logger.error(
+                f"Processing failed: {e}",
+                extra={
+                    "task_id": task_id,
+                    "error": str(e),
+                },
+                exc_info=True
+            )
+            
+            # Task will be marked as blocked in process_edit_request's exception handler
+            return {
+                "status": "failed",
+                "task_id": task_id,
+                "error": str(e),
+            }
         
     except HTTPException:
         raise
@@ -343,10 +557,14 @@ async def process_edit_request(
         )
         
         # Convert to PNG (handles all formats)
+        # ✅ NEW: Run in threadpool to avoid blocking event loop
+        from fastapi.concurrency import run_in_threadpool
+        
         converter = ImageConverter()
         
         try:
-            png_bytes, png_filename = await converter.convert_to_png(
+            png_bytes, png_filename = await run_in_threadpool(
+                converter.convert_to_png,
                 file_bytes=original_bytes,
                 filename=filename
             )
@@ -367,9 +585,10 @@ async def process_edit_request(
                 extra={"task_id": task_id, "file_name": filename}
             )
             
+            config = get_config()
             await clickup.update_task_status(
                 task_id=task_id,
-                status="blocked",
+                status=config.clickup_status_blocked,
                 comment=(
                     f"❌ **Unsupported File Format**\n\n"
                     f"File: {filename}\n"
@@ -391,9 +610,10 @@ async def process_edit_request(
                 extra={"task_id": task_id, "file_name": filename}
             )
             
+            config = get_config()
             await clickup.update_task_status(
                 task_id=task_id,
-                status="blocked",
+                status=config.clickup_status_blocked,
                 comment=(
                     f"❌ **File Conversion Error**\n\n"
                     f"File: {filename}\n"
@@ -456,9 +676,10 @@ async def process_edit_request(
 
             # 🔧 UNCHECK AI EDIT CHECKBOX
             logger.info("Unchecking AI Edit checkbox", extra={"task_id": task_id})
+            config = get_config()
             await clickup.update_custom_field(
                 task_id=task_id,
-                field_id="b2c19afd-0ef2-485c-94b9-3a6124374ff4",
+                field_id=config.clickup_custom_field_id_ai_edit,
                 value=False,
             )
             
@@ -473,7 +694,7 @@ async def process_edit_request(
             
             await clickup.update_task_status(
                 task_id=task_id,
-                status="Complete",
+                status=config.clickup_status_complete,
                 comment=comment,
             )
             
@@ -509,9 +730,10 @@ async def process_edit_request(
         
         try:
             # Attempt to update ClickUp with error
+            config = get_config()
             await clickup.update_task_status(
                 task_id=task_id,
-                status="blocked",
+                status=config.clickup_status_blocked,
                 comment=f"❌ **Processing Error**\n\nError: {str(e)}\n\nPlease contact support or retry manually.",
             )
         except Exception as notify_error:

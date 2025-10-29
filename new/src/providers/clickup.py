@@ -14,14 +14,20 @@ logger = get_logger(__name__)
 class ClickUpClient(BaseProvider):
     """Client for ClickUp API."""
     
-    def __init__(self, api_key: str, timeout: float = 30.0):
+    def __init__(self, api_key: str, timeout: Optional[float] = None):
         """
         Initialize ClickUp client.
         
         Args:
             api_key: ClickUp API key
-            timeout: Request timeout in seconds
+            timeout: Request timeout in seconds (defaults to config value)
         """
+        # ✅ NEW: Use config value if not explicitly provided
+        if timeout is None:
+            from ..utils.config import get_config
+            config = get_config()
+            timeout = config.timeout_clickup_seconds
+        
         super().__init__(
             api_key=api_key,
             base_url="https://api.clickup.com/api/v2",

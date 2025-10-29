@@ -1,0 +1,70 @@
+# ============================================================================
+# SWEET SPOT CONFIGURATION
+# Only values you'll actually change/tune
+# ============================================================================
+
+# ============================================================================
+# API Keys (from environment)
+# ============================================================================
+openrouter_api_key: ${OPENROUTER_API_KEY}
+wavespeed_api_key: ${WAVESPEED_API_KEY}
+clickup_api_key: ${CLICKUP_API_KEY}
+clickup_webhook_secret: ${CLICKUP_WEBHOOK_SECRET}
+
+# ============================================================================
+# ClickUp Configuration (workspace-specific)
+# ============================================================================
+clickup:
+  custom_field_id_ai_edit: "b2c19afd-0ef2-485c-94b9-3a6124374ff4"
+  
+  statuses:
+    complete: "Complete"
+    blocked: "blocked"
+    needs_review: "Needs Human Review"
+
+# ============================================================================
+# API Rate Limits (tune based on load)
+# ============================================================================
+rate_limits:
+  enhancement_concurrent: 3  # Max concurrent enhancement calls
+  validation_concurrent: 2   # Max concurrent validation calls
+  validation_delay_seconds: 2  # Delay between validations
+
+# ============================================================================
+# Workflow Settings (business logic)
+# ============================================================================
+workflow:
+  max_iterations: 3  # Maximum refinement iterations
+  max_step_attempts: 2  # Retry limit per sequential step
+  validation_pass_threshold: 8  # Score >= 8 = PASS
+
+# ============================================================================
+# Image Models (which models to use)
+# ============================================================================
+models:
+  enabled:
+    - "wan-2.5-edit"
+    - "seedream-v4"
+    # Add/remove models here
+
+# ============================================================================
+# Timeouts (environment-specific)
+# ============================================================================
+timeouts:
+  openrouter_seconds: 120  # Enhancement/validation API calls
+  wavespeed_seconds: 120   # Image generation
+  wavespeed_polling_seconds: 300  # Max wait for generation
+  clickup_seconds: 30  # ClickUp API calls
+
+# ============================================================================
+# Task Locking (operational)
+# ============================================================================
+locking:
+  ttl_seconds: 3600  # 1 hour - how long before stale
+  cleanup_interval: 100  # Check every N acquisitions
+
+# ============================================================================
+# Environment
+# ============================================================================
+app_env: "development"  # development, staging, production
+log_level: "INFO"  # DEBUG, INFO, WARNING, ERROR

@@ -69,9 +69,32 @@ class Config(BaseModel):
     app_env: str = Field(default="development", alias="APP_ENV")
     log_level: str = Field(default="INFO", alias="LOG_LEVEL")
     max_iterations: int = Field(default=3, alias="MAX_ITERATIONS")
-
     max_step_attempts: int = Field(default=2, alias="MAX_STEP_ATTEMPTS")
     validation_pass_threshold: int = Field(default=8, alias="VALIDATION_PASS_THRESHOLD")
+    
+    # ✅ NEW: ClickUp Configuration
+    clickup_custom_field_id_ai_edit: str = Field(
+        default="b2c19afd-0ef2-485c-94b9-3a6124374ff4",
+        alias="CLICKUP_CUSTOM_FIELD_ID_AI_EDIT"
+    )
+    clickup_status_complete: str = Field(default="Complete", alias="CLICKUP_STATUS_COMPLETE")
+    clickup_status_blocked: str = Field(default="blocked", alias="CLICKUP_STATUS_BLOCKED")
+    clickup_status_needs_review: str = Field(default="Needs Human Review", alias="CLICKUP_STATUS_NEEDS_REVIEW")
+    
+    # ✅ NEW: Rate Limits
+    rate_limit_enhancement: int = Field(default=3, alias="RATE_LIMIT_ENHANCEMENT")
+    rate_limit_validation: int = Field(default=2, alias="RATE_LIMIT_VALIDATION")
+    validation_delay_seconds: int = Field(default=2, alias="VALIDATION_DELAY_SECONDS")
+    
+    # ✅ NEW: Timeouts
+    timeout_openrouter_seconds: int = Field(default=120, alias="TIMEOUT_OPENROUTER_SECONDS")
+    timeout_wavespeed_seconds: int = Field(default=120, alias="TIMEOUT_WAVESPEED_SECONDS")
+    timeout_wavespeed_polling_seconds: int = Field(default=300, alias="TIMEOUT_WAVESPEED_POLLING_SECONDS")
+    timeout_clickup_seconds: int = Field(default=30, alias="TIMEOUT_CLICKUP_SECONDS")
+    
+    # ✅ NEW: Locking
+    lock_ttl_seconds: int = Field(default=3600, alias="LOCK_TTL_SECONDS")
+    lock_cleanup_interval: int = Field(default=100, alias="LOCK_CLEANUP_INTERVAL")
     
     # Model Configuration
     image_models: list[ModelConfig] = []
@@ -97,6 +120,11 @@ def load_config() -> Config:
     """
     Load configuration from environment and YAML files.
     
+    Priority (highest to lowest):
+    1. Environment variables
+    2. config/config.yaml
+    3. config/models.yaml
+    
     Returns:
         Config instance
         
@@ -106,27 +134,55 @@ def load_config() -> Config:
     global _config
     
     try:
-        # Load models.yaml
+        # ✅ NEW: Load config.yaml (optional)
+        config_yaml_path = Path("config/config.yaml")
+        config_yaml_data = {}
+        if config_yaml_path.exists():
+            with open(config_yaml_path, "r") as f:
+                config_yaml_data = yaml.safe_load(f) or {}
+        
+        # Load models.yaml (required)
         models_path = Path("config/models.yaml")
-        if not models_path.exists():
+        models_config = {}
+        if models_path.exists():
+            with open(models_path, "r") as f:
+                models_config = yaml.safe_load(f) or {}
+        else:
+            # models.yaml is still required for model definitions
             raise ConfigurationError(f"models.yaml not found at {models_path}")
         
-        with open(models_path, "r") as f:
-            models_config = yaml.safe_load(f)
-        
-        # Merge environment variables with YAML config
+        # ✅ NEW: Merge all sources (priority: env > config.yaml > models.yaml)
         config_data = {
-            **os.environ,  # Environment variables
-            **models_config,  # YAML config
+            **models_config,      # Lowest priority
+            **config_yaml_data,   # Middle priority
+            **os.environ,         # Highest priority (env overrides)
         }
         
-        _config = Config(**config_data)
+        # ✅ NEW: Flatten nested dicts for Pydantic
+        flattened = {}
+        for key, value in config_data.items():
+            if isinstance(value, dict):
+                # Flatten nested dicts (e.g., clickup.statuses.complete -> clickup_statuses_complete)
+                for subkey, subvalue in value.items():
+                    if isinstance(subvalue, dict):
+                        # Handle double-nested (e.g., clickup.statuses.complete)
+                        for subsubkey, subsubvalue in subvalue.items():
+                            flat_key = f"{key}_{subkey}_{subsubkey}"
+                            flattened[flat_key] = subsubvalue
+                    else:
+                        flat_key = f"{key}_{subkey}"
+                        flattened[flat_key] = subvalue
+            else:
+                flattened[key] = value
+        
+        _config = Config(**flattened)
         
         logger.info(
             "Configuration loaded successfully",
             extra={
                 "models_count": len(_config.image_models),
                 "environment": _config.app_env,
+                "config_yaml_loaded": config_yaml_path.exists(),
             }
         )
         

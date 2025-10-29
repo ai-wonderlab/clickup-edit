@@ -105,10 +105,14 @@ The AI agent attempted {iterations_attempted} iterations but could not produce a
 """
         
         try:
+            # ✅ NEW: Use config value for status name
+            from ..utils.config import get_config
+            config = get_config()
+            
             # Update task status
             await self.client.update_task_status(
                 task_id=task_id,
-                status="Needs Human Review",
+                status=config.clickup_status_needs_review,
                 comment=comment,
             )
             

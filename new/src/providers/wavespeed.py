@@ -15,7 +15,13 @@ logger = get_logger(__name__)
 class WaveSpeedAIClient(BaseProvider):
     """Client for WaveSpeedAI image editing API."""
     
-    def __init__(self, api_key: str, timeout: float = 120.0):
+    def __init__(self, api_key: str, timeout: Optional[float] = None):
+        # ✅ NEW: Use config value if not explicitly provided
+        if timeout is None:
+            from ..utils.config import get_config
+            config = get_config()
+            timeout = config.timeout_wavespeed_seconds
+        
         super().__init__(
             api_key=api_key,
             base_url="https://api.wavespeed.ai/api/v3",
@@ -172,10 +178,16 @@ class WaveSpeedAIClient(BaseProvider):
         self,
         task_id: str,
         model_name: str,
-        max_wait: int = 300,
+        max_wait: Optional[int] = None,
         poll_interval: int = 2,
     ) -> str:
         """Poll for task completion."""
+        # ✅ NEW: Use config value if not explicitly provided
+        if max_wait is None:
+            from ..utils.config import get_config
+            config = get_config()
+            max_wait = config.timeout_wavespeed_polling_seconds
+        
         import time
         start_time = time.time()
         

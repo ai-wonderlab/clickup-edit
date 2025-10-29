@@ -182,6 +182,7 @@ class PromptEnhancer:
                     extra={
                         "model": model_name,
                         "error": str(result),
+                        "error_type": type(result).__name__,
                     }
                 )
                 failed.append((model_name, result))
@@ -195,13 +196,28 @@ class PromptEnhancer:
                     }
                 )
         
-        # Check if any succeeded
+        # ✅ NEW: Better failure handling
         if not successful:
             logger.error(
                 f"All {len(self.model_names)} enhancements failed",
-                extra={"failures": len(failed)}
+                extra={
+                    "failures": len(failed),
+                    "error_summary": [f"{name}: {type(err).__name__}" for name, err in failed]
+                }
             )
             raise AllEnhancementsFailed([e for _, e in failed])
+        
+        # ✅ NEW: Log if partial success
+        if failed:
+            logger.warning(
+                f"Partial enhancement success: {len(successful)}/{len(self.model_names)}",
+                extra={
+                    "successful": len(successful),
+                    "failed": len(failed),
+                    "failed_models": [name for name, _ in failed],
+                    "success_rate": f"{len(successful)/len(self.model_names)*100:.1f}%",
+                }
+            )
         
         logger.info(
             f"Parallel enhancement complete: {len(successful)}/{len(self.model_names)} successful",

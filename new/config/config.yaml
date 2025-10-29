@@ -1,0 +1,46 @@
+# Configuration for ClickUp Image Edit Agent
+# This file provides centralized configuration for all services
+# Priority: Environment variables > config.yaml > models.yaml
+
+# ClickUp Configuration
+clickup:
+  custom_field_id_ai_edit: "your-custom-field-id-here"  # Replace with actual field ID
+  statuses:
+    complete: "Complete"
+    blocked: "Blocked"
+    needs_review: "Needs Human Review"
+
+# Rate Limiting
+rate_limits:
+  enhancement: 3  # Max concurrent enhancement requests
+  validation: 2   # Max concurrent validation requests
+
+# Timeouts (seconds)
+timeouts:
+  openrouter: 60      # OpenRouter API timeout
+  wavespeed: 120      # WaveSpeed API timeout
+  clickup: 30         # ClickUp API timeout
+  wavespeed_polling: 300  # Max time to wait for image generation
+
+# Validation Settings
+validation:
+  delay_seconds: 2        # Delay between validations (avoid rate limits)
+  pass_threshold: 8.0     # Score threshold for passing (0-10 scale)
+
+# Task Locking (prevents duplicate processing)
+locking:
+  ttl_seconds: 3600       # Lock lifetime (1 hour)
+  cleanup_interval: 100   # Cleanup every N lock acquisitions
+
+# Processing Settings
+processing:
+  max_iterations: 3       # Max refinement iterations per task
+  parallel_processing: true  # Enable parallel model processing
+
+# Logging
+logging:
+  level: "INFO"  # DEBUG, INFO, WARNING, ERROR, CRITICAL
+  format: "json"  # json or text
+
+# Environment
+app_env: "production"  # development, staging, production
