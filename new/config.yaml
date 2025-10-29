@@ -51,10 +51,10 @@ models:
 # Timeouts (environment-specific)
 # ============================================================================
 timeouts:
-  openrouter_seconds: 120  # Enhancement/validation API calls
-  wavespeed_seconds: 120   # Image generation
+  openrouter_seconds: 300  # Enhancement/validation API calls
+  wavespeed_seconds: 300   # Image generation
   wavespeed_polling_seconds: 300  # Max wait for generation
-  clickup_seconds: 30  # ClickUp API calls
+  clickup_seconds: 60  # ClickUp API calls
 
 # ============================================================================
 # Task Locking (operational)
