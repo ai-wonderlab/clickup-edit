@@ -38,10 +38,9 @@ class WebhookResponse(BaseModel):
 _task_locks: Dict[str, Tuple[asyncio.Lock, float]] = {}
 _locks_registry_lock = asyncio.Lock()  # Protects the registry itself
 
-# Configuration loaded from config at startup
-config = get_config()
-LOCK_TTL_SECONDS = config.lock_ttl_seconds
-CLEANUP_CHECK_INTERVAL = config.lock_cleanup_interval
+# ✅ Use defaults at module level (will be overridden from config at runtime)
+LOCK_TTL_SECONDS = 3600  # 1 hour default
+CLEANUP_CHECK_INTERVAL = 100  # Cleanup every 100 lock acquisitions
 
 
 async def cleanup_stale_locks(force: bool = False) -> int:
@@ -405,7 +404,7 @@ async def clickup_webhook(
         custom_fields = task_data.get("custom_fields", [])
         needs_ai_edit = False
         
-        config = get_config()
+        # config already loaded at top of function (line 329)
         for field in custom_fields:
             if field.get("id") == config.clickup_custom_field_id_ai_edit:
                 if field.get("value") == "true" or field.get("value") is True:
