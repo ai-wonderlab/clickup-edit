@@ -72,9 +72,9 @@ class WaveSpeedAIClient(BaseProvider):
             payload["seed"] = -1
             payload["output_format"] = "jpeg"
         elif "nano-banana-pro" in model_name.lower():
-            # ✅ NEW: nano-banana-pro specific settings
+            # ✅ nano-banana-pro specific settings
             payload["output_format"] = "png"
-            payload["resolution"] = "4k"  # Always 4k for pro version
+            payload["resolution"] = "2k"  # 2K resolution (stays under Claude's 5MB limit)
         elif "nano-banana" in model_name.lower():
             payload["output_format"] = "jpeg"
         elif "wan" in model_name.lower():
