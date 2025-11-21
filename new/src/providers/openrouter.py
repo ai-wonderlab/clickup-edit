@@ -292,20 +292,27 @@ Return ONLY JSON."""
                     edited_response.raise_for_status()
                     edited_bytes = edited_response.content
 
-                # ✅ FORCE CONVERT TO PNG (regardless of source format)
+                # ✅ SMART FORMAT HANDLING: Keep JPEG as JPEG, convert others to PNG
                 from PIL import Image
                 import io
 
-                logger.info("🔄 Converting edited image to PNG format")
                 edited_img = Image.open(io.BytesIO(edited_bytes))
-                edited_png_buffer = io.BytesIO()
-                edited_img.save(edited_png_buffer, format='PNG')
-                edited_png_bytes = edited_png_buffer.getvalue()
-                logger.info("lets go man")
-                edited_b64 = base64.b64encode(edited_png_bytes).decode('utf-8')
-                edited_data_url = f"data:image/png;base64,{edited_b64}"
-
-                logger.info(f"✅ Image converted: {len(edited_bytes)/1024:.1f}KB → {len(edited_png_bytes)/1024:.1f}KB PNG")
+                image_format = edited_img.format  # JPEG, PNG, etc.
+                
+                if image_format == 'JPEG':
+                    # Keep JPEG as-is (much smaller for validation)
+                    logger.info(f"✅ Keeping JPEG format for validation ({len(edited_bytes)/1024:.1f}KB)")
+                    edited_b64 = base64.b64encode(edited_bytes).decode('utf-8')
+                    edited_data_url = f"data:image/jpeg;base64,{edited_b64}"
+                else:
+                    # Convert to PNG for other formats
+                    logger.info(f"🔄 Converting {image_format} to PNG format")
+                    edited_png_buffer = io.BytesIO()
+                    edited_img.save(edited_png_buffer, format='PNG')
+                    edited_png_bytes = edited_png_buffer.getvalue()
+                    edited_b64 = base64.b64encode(edited_png_bytes).decode('utf-8')
+                    edited_data_url = f"data:image/png;base64,{edited_b64}"
+                    logger.info(f"✅ Image converted: {len(edited_bytes)/1024:.1f}KB → {len(edited_png_bytes)/1024:.1f}KB PNG")
                 
                 logger.info("✅ Both images prepared for validation")
                 
