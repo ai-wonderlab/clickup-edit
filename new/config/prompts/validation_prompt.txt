@@ -88,7 +88,7 @@ Evidence to look for:
 STEP 6: DIRECT COMPARISON - TEXT
 For all text elements:
 - Character accuracy: Correct characters (especially Greek, numbers)?
-- Greek uppercase check: No unwanted tone marks?
+- Greek uppercase check: No tone marks?
 - Sharpness: Text clear and readable?
 - Spacing: Similar character spacing?
 
@@ -109,7 +109,7 @@ FAIL FOR (noticeable issues):
 • Logo letter spacing noticeably different
 • Logo colors visibly different
 • Text content wrong (incorrect characters)
-• Greek uppercase has unwanted tone marks
+• Greek uppercase has tone marks
 • Requested changes not done or done incorrectly
 • Elements noticeably moved/resized without request
 • Visible quality degradation

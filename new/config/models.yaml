@@ -7,13 +7,13 @@ image_models:
   #   provider: wavespeed
   #   priority: 2
   #   supports_greek: true
+  - name: nano-banana-pro
+    provider: wavespeed
+    priority: 1
+    supports_greek: true
   - name: wan-2.5-edit
     provider: wavespeed
-    priority: 3
-    supports_greek: true
-  - name: nano-banana
-    provider: wavespeed
-    priority: 4
+    priority: 2
     supports_greek: true
 
 enhancement:

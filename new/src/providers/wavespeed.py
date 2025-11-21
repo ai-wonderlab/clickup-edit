@@ -54,6 +54,7 @@ class WaveSpeedAIClient(BaseProvider):
             "qwen-edit-plus": "wavespeed-ai/qwen-image/edit-plus",
             "wan-2.5-edit": "alibaba/wan-2.5/image-edit",
             "nano-banana": "google/nano-banana/edit",
+            "nano-banana-pro": "google/nano-banana-pro/edit",  # ✅ NEW: Pro version
         }
         
         model_id = model_mapping.get(model_name, model_name)
@@ -70,6 +71,10 @@ class WaveSpeedAIClient(BaseProvider):
         if "qwen" in model_name.lower():
             payload["seed"] = -1
             payload["output_format"] = "jpeg"
+        elif "nano-banana-pro" in model_name.lower():
+            # ✅ NEW: nano-banana-pro specific settings
+            payload["output_format"] = "png"
+            payload["resolution"] = "4k"  # Always 4k for pro version
         elif "nano-banana" in model_name.lower():
             payload["output_format"] = "jpeg"
         elif "wan" in model_name.lower():

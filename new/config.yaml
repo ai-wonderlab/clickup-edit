@@ -18,9 +18,9 @@ clickup:
   custom_field_id_ai_edit: "b2c19afd-0ef2-485c-94b9-3a6124374ff4"
   
   statuses:
-    complete: "Complete"
+    complete: "complete"
     blocked: "blocked"
-    needs_review: "Needs Human Review"
+    needs_review: "for review"
 
 # ============================================================================
 # API Rate Limits (tune based on load)
@@ -39,13 +39,9 @@ workflow:
   validation_pass_threshold: 8  # Score >= 8 = PASS
 
 # ============================================================================
-# Image Models (which models to use)
+# Image Models - Managed in config/models.yaml
+# To enable/disable models, edit config/models.yaml
 # ============================================================================
-models:
-  enabled:
-    - "wan-2.5-edit"
-    - "seedream-v4"
-    # Add/remove models here
 
 # ============================================================================
 # Timeouts (environment-specific)
