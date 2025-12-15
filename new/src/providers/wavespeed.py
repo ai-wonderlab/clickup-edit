@@ -75,7 +75,7 @@ class WaveSpeedAIClient(BaseProvider):
             # ✅ nano-banana-pro specific settings
             # NOTE: aspect_ratio NOT specified = preserves input image dimensions
             payload["output_format"] = "jpeg"  # JPEG much smaller than PNG (60-80% reduction)
-            payload["resolution"] = "2k"  # 2K resolution
+            payload["resolution"] = "1k"  # 1K resolution - 2K still exceeds 5MB after base64 encoding
         elif "nano-banana" in model_name.lower():
             payload["output_format"] = "jpeg"
         elif "wan" in model_name.lower():
