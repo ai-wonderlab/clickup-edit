@@ -11,7 +11,7 @@ image_models:
     provider: wavespeed
     priority: 1
     supports_greek: true
-  - name: wan-2.5-edit
+  - name: nano-banana-pro/edit-ultra
     provider: wavespeed
     priority: 2
     supports_greek: true

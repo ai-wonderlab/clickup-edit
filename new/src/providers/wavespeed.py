@@ -55,6 +55,7 @@ class WaveSpeedAIClient(BaseProvider):
             "wan-2.5-edit": "alibaba/wan-2.5/image-edit",
             "nano-banana": "google/nano-banana/edit",
             "nano-banana-pro": "google/nano-banana-pro/edit",  # ✅ NEW: Pro version
+            "nano-banana-pro/edit-ultra": "google/nano-banana-pro/edit-ultra",  # ✅ NEW: Ultra version
         }
         
         model_id = model_mapping.get(model_name, model_name)
@@ -71,6 +72,11 @@ class WaveSpeedAIClient(BaseProvider):
         if "qwen" in model_name.lower():
             payload["seed"] = -1
             payload["output_format"] = "jpeg"
+        elif "nano-banana-pro/edit-ultra" in model_name.lower():
+            # ✅ nano-banana-pro ULTRA specific settings
+            # NOTE: Check ultra FIRST (more specific) before regular nano-banana-pro
+            payload["output_format"] = "jpeg"
+            payload["resolution"] = "4k"  # Ultra supports 4K natively
         elif "nano-banana-pro" in model_name.lower():
             # ✅ nano-banana-pro specific settings
             # NOTE: aspect_ratio NOT specified = preserves input image dimensions
