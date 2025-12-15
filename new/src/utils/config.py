@@ -221,7 +221,10 @@ def load_deep_research(model_name: str) -> Dict[str, str]:
         ConfigurationError: If research files not found
     """
     config = get_config()
-    model_dir = config.deep_research_dir / model_name
+    
+    # Special handling for nano-banana-pro/edit-ultra -> nano-banana-pro-edit-ultra folder
+    folder_name = model_name.replace("/", "-") if "/" in model_name else model_name
+    model_dir = config.deep_research_dir / folder_name
     
     activation_path = model_dir / "activation.txt"
     research_path = model_dir / "research.md"
