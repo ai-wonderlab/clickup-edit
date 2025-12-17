@@ -65,6 +65,10 @@ class Config(BaseModel):
     clickup_api_key: str = Field(..., alias="CLICKUP_API_KEY")
     clickup_webhook_secret: str = Field(..., alias="CLICKUP_WEBHOOK_SECRET")
     
+    # ClickUp Settings
+    clickup_custom_field_id_ai_edit: str = Field(..., alias="CLICKUP_CUSTOM_FIELD_ID_AI_EDIT")
+    clickup_status_complete: str = Field(default="complete", alias="CLICKUP_STATUS_COMPLETE")
+    
     # Application Settings
     app_env: str = Field(default="development", alias="APP_ENV")
     log_level: str = Field(default="INFO", alias="LOG_LEVEL")
