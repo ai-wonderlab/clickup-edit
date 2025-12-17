@@ -6,7 +6,6 @@ import asyncio
 import time
 from typing import Dict, Any, Tuple, Optional, List
 from fastapi import APIRouter, Request, HTTPException, Depends
-from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel
 
 from ..models.schemas import WebhookPayload, ClickUpTask, ClickUpAttachment, ClassifiedTask
@@ -573,9 +572,8 @@ async def process_edit_request(
                 # Download
                 original_bytes = await clickup.download_attachment(attachment_url)
                 
-                # Convert to PNG (sync function, run in threadpool)
-                png_bytes, png_filename = await run_in_threadpool(
-                    converter.convert_to_png,
+                # Convert to PNG (async)
+                png_bytes, png_filename = await converter.convert_to_png(
                     file_bytes=original_bytes,
                     filename=filename
                 )
