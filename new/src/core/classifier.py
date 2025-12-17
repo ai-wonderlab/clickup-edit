@@ -82,7 +82,7 @@ class Classifier:
                 "attachments": [
                     {
                         "index": i,
-                        "filename": a[0],
+                        "file_name": a[0],
                         "size_kb": round(len(a[1]) / 1024, 2),
                     }
                     for i, a in enumerate(attachments)
@@ -155,7 +155,7 @@ class Classifier:
                             "index": a.index,
                             "intent": a.intent.value,
                             "role": a.role,
-                            "filename": a.filename,
+                            "file_name": a.filename,
                             "description": a.description,
                         }
                         for a in classified.attachments

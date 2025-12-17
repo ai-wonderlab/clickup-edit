@@ -566,7 +566,7 @@ async def process_edit_request(
             
             logger.info(
                 f"Downloading attachment {i + 1}/{len(attachments_data)}",
-                extra={"task_id": task_id, "filename": filename}
+                extra={"task_id": task_id, "file_name": filename}
             )
             
             try:
@@ -600,7 +600,7 @@ async def process_edit_request(
                     f"Attachment {i + 1} processed",
                     extra={
                         "task_id": task_id,
-                        "filename": png_filename,
+                        "file_name": png_filename,
                         "size_kb": len(png_bytes) / 1024,
                     }
                 )
@@ -608,7 +608,7 @@ async def process_edit_request(
             except (UnsupportedFormatError, ImageConversionError) as e:
                 logger.error(
                     f"Attachment {i + 1} failed: {e}",
-                    extra={"task_id": task_id, "filename": filename}
+                    extra={"task_id": task_id, "file_name": filename}
                 )
                 # Continue with other attachments
                 continue
