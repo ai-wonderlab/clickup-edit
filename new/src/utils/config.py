@@ -73,6 +73,13 @@ class Config(BaseModel):
     max_step_attempts: int = Field(default=2, alias="MAX_STEP_ATTEMPTS")
     validation_pass_threshold: int = Field(default=8, alias="VALIDATION_PASS_THRESHOLD")
     
+    # Rate Limiting
+    rate_limit_enhancement: int = Field(default=5, alias="RATE_LIMIT_ENHANCEMENT")
+    rate_limit_validation: int = Field(default=3, alias="RATE_LIMIT_VALIDATION")
+    
+    # Timeout Settings
+    timeout_openrouter_seconds: float = Field(default=120.0, alias="TIMEOUT_OPENROUTER_SECONDS")
+    
     # Model Configuration
     image_models: list[ModelConfig] = []
     enhancement: Optional[EnhancementConfig] = None
