@@ -65,8 +65,9 @@ class WaveSpeedAIClient(BaseProvider):
             "qwen-edit-plus": "wavespeed-ai/qwen-image/edit-plus",
             "wan-2.5-edit": "alibaba/wan-2.5/image-edit",
             "nano-banana": "google/nano-banana/edit",
-            "nano-banana-pro": "google/nano-banana-pro/edit",  # ✅ NEW: Pro version
-            "nano-banana-pro/edit-ultra": "google/nano-banana-pro/edit-ultra",  # ✅ NEW: Ultra version
+            # ✅ NEW: Nano Banana Pro models
+            "nano-banana-pro-edit": "google/nano-banana-pro/edit",
+            "nano-banana-pro-edit-ultra": "google/nano-banana-pro/edit-ultra",
         }
         
         model_id = model_mapping.get(model_name, model_name)
@@ -83,16 +84,14 @@ class WaveSpeedAIClient(BaseProvider):
         if "qwen" in model_name.lower():
             payload["seed"] = -1
             payload["output_format"] = "jpeg"
-        elif "nano-banana-pro/edit-ultra" in model_name.lower():
-            # ✅ nano-banana-pro ULTRA specific settings
-            # NOTE: Check ultra FIRST (more specific) before regular nano-banana-pro
-            payload["output_format"] = "jpeg"
-            payload["resolution"] = "4k"  # Ultra supports 4K natively
-        elif "nano-banana-pro" in model_name.lower():
-            # ✅ nano-banana-pro specific settings
-            # NOTE: aspect_ratio NOT specified = preserves input image dimensions
-            payload["output_format"] = "jpeg"  # JPEG much smaller than PNG (60-80% reduction)
-            payload["resolution"] = "1k"  # 1K resolution - 2K still exceeds 5MB after base64 encoding
+        elif model_name == "nano-banana-pro-edit-ultra":
+            # ✅ nano-banana-pro ULTRA specific settings (4K resolution)
+            payload["output_format"] = "png"
+            payload["resolution"] = "4k"
+        elif model_name == "nano-banana-pro-edit":
+            # ✅ nano-banana-pro specific settings (1K resolution)
+            payload["output_format"] = "png"
+            payload["resolution"] = "1k"
         elif "nano-banana" in model_name.lower():
             payload["output_format"] = "jpeg"
         elif "wan" in model_name.lower():

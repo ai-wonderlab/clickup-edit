@@ -83,6 +83,7 @@ class Config(BaseModel):
     
     # Timeout Settings
     timeout_openrouter_seconds: float = Field(default=120.0, alias="TIMEOUT_OPENROUTER_SECONDS")
+    timeout_wavespeed_seconds: float = Field(default=300.0, alias="TIMEOUT_WAVESPEED_SECONDS")
     
     # Model Configuration
     image_models: list[ModelConfig] = []
