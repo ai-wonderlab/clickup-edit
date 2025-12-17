@@ -34,3 +34,15 @@ class IterationStage(str, Enum):
     VALIDATION = "validation"
     REFINEMENT = "refinement"
     DECISION = "decision"
+
+
+class TaskType(str, Enum):
+    """Type of task detected by classifier."""
+    SIMPLE_EDIT = "simple_edit"
+    BRANDED_CREATIVE = "branded_creative"
+
+
+class AttachmentIntent(str, Enum):
+    """How attachment should be used."""
+    INCLUDE_IN_OUTPUT = "include_in_output"
+    REFERENCE_ONLY = "reference_only"

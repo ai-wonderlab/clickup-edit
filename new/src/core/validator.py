@@ -1,12 +1,15 @@
 """Validation component with parallel validation using Gemini."""
 
 import asyncio
+import base64
+import time
 from typing import List
 
 from ..providers.openrouter import OpenRouterClient
 from ..models.schemas import GeneratedImage, ValidationResult
 from ..utils.logger import get_logger
-from ..utils.config import load_validation_prompt
+from ..utils.config import load_validation_prompt, load_fonts_guide
+from ..utils.images import resize_for_context
 
 logger = get_logger(__name__)
 
@@ -25,9 +28,18 @@ class Validator:
         self.validation_prompt_template = None
     
     def load_validation_prompt(self):
-        """Load validation prompt template from file."""
+        """Load validation prompt template from file and inject fonts guide."""
         logger.info("Loading validation prompt template")
         self.validation_prompt_template = load_validation_prompt()
+        
+        # Inject fonts guide
+        fonts_guide = load_fonts_guide()
+        if fonts_guide and "{fonts_guide}" in self.validation_prompt_template:
+            self.validation_prompt_template = self.validation_prompt_template.replace(
+                "{fonts_guide}", fonts_guide
+            )
+            logger.info("Injected fonts guide into validation prompt")
+        
         logger.info(
             "Validation prompt loaded",
             extra={"length": len(self.validation_prompt_template)}
@@ -37,7 +49,8 @@ class Validator:
         self,
         generated_image: GeneratedImage,
         original_request: str,
-        original_image_bytes: bytes,  # ✅ Receive PNG
+        original_images_bytes: List[bytes],  # ✅ Multiple original images
+        task_type: str = "SIMPLE_EDIT",  # ✅ NEW: Task type for validation criteria
     ) -> ValidationResult:
         """
         Validate a single generated image.
@@ -45,6 +58,8 @@ class Validator:
         Args:
             generated_image: Generated image to validate
             original_request: Original user edit request
+            original_images_bytes: List of original image bytes for comparison
+            task_type: Task type for validation criteria
             
         Returns:
             ValidationResult
@@ -57,46 +72,100 @@ class Validator:
         
         model_name = generated_image.model_name
         
+        logger.info("")
+        logger.info("-" * 60)
+        logger.info(f"✅ VALIDATION START - {model_name}")
+        logger.info("-" * 60)
+        
+        # ============================================
+        # INPUT LOGGING
+        # ============================================
         logger.info(
-            f"Validating image from {model_name}",
-            extra={"model": model_name}
+            "📥 VALIDATION INPUT",
+            extra={
+                "model": model_name,
+                "task_type": task_type,
+                "original_image_count": len(original_images_bytes),
+                "original_sizes_kb": [round(len(b) / 1024, 2) for b in original_images_bytes],
+                "edited_size_kb": round(len(generated_image.image_bytes) / 1024, 2),
+                "request_length": len(original_request),
+                "request_full": original_request,
+            }
         )
         
+        # Build task type instruction for validation prompt
+        task_type_instruction = f"TASK TYPE: {task_type}\n"
+        if task_type == "BRANDED_CREATIVE":
+            task_type_instruction += "Apply SECTION A (common checks) + SECTION C (branded creative) criteria.\n\n"
+        else:
+            task_type_instruction += "Apply SECTION A (common checks) + SECTION B (simple edit) criteria.\n\n"
+        
+        formatted_prompt = task_type_instruction + self.validation_prompt_template
+        
+        logger.info(
+            "📝 VALIDATION PROMPT BUILT",
+            extra={
+                "task_type": task_type,
+                "prompt_length": len(formatted_prompt),
+                "section_used": "A + C" if task_type == "BRANDED_CREATIVE" else "A + B",
+            }
+        )
+        
+        validation_start = time.time()
+        
         try:
+            # For validation, we pass the first original image for backward compatibility
+            # The validator API still expects single original for now
             result = await self.client.validate_image(
                 image_url=generated_image.temp_url,
-                original_image_bytes=original_image_bytes,  # ✅ Pass bytes not URL
+                original_image_bytes=original_images_bytes[0],  # ✅ Pass first image for comparison
                 original_request=original_request,
                 model_name=model_name,
-                validation_prompt_template=self.validation_prompt_template,
+                validation_prompt_template=formatted_prompt,
             )
 
-            print(f"\n{'='*80}")
-            print(f"🎯 VALIDATION RESULT for {model_name}")
-            print(f"📊 Score: {result.score}/10")
-            print(f"✅ Passed: {result.passed}")
-            print(f"🚨 Issues: {result.issues}")
-            print(f"💭 Reasoning: {result.reasoning[:200]}...")
-            print(f"{'='*80}\n")
+            validation_duration = time.time() - validation_start
+
+            # ============================================
+            # RESULT LOGGING
+            # ============================================
+            logger.info("")
+            logger.info("-" * 40)
+            logger.info(f"✅ VALIDATION RESULT - {model_name}")
+            logger.info("-" * 40)
             
             logger.info(
-                f"Validation complete for {model_name}",
+                "📊 VALIDATION SCORE",
                 extra={
-                    "model": model_name,
+                    "model": result.model_name,
                     "passed": result.passed,
                     "score": result.score,
-                    "issues": len(result.issues),
+                    "threshold": 8,
+                    "issues": result.issues,
+                    "reasoning": result.reasoning,
+                    "validation_time_seconds": round(validation_duration, 2),
                 }
             )
+            
+            if result.passed:
+                logger.info(f"✅ PASSED with score {result.score}/10")
+            else:
+                logger.warning(f"❌ FAILED with score {result.score}/10")
+                logger.warning(f"   Issues: {result.issues}")
             
             return result
             
         except Exception as e:
+            validation_duration = time.time() - validation_start
             logger.error(
-                f"Validation failed for {model_name}: {type(e).__name__}: {str(e)}",
-                extra={"model": model_name, "error": str(e), "error_type": type(e).__name__}
+                f"❌ VALIDATION FAILED - {model_name}",
+                extra={
+                    "model": model_name,
+                    "error": str(e),
+                    "error_type": type(e).__name__,
+                    "duration_seconds": round(validation_duration, 2),
+                }
             )
-            print(f"\n🔴 VALIDATION EXCEPTION: {type(e).__name__}: {str(e)}")
             import traceback
             traceback.print_exc()
             raise
@@ -105,89 +174,103 @@ class Validator:
         self,
         generated_images: List[GeneratedImage],
         original_request: str,
-        original_image_bytes: bytes,  # ✅ Receive PNG
+        original_images_bytes: List[bytes],  # ✅ Multiple original images
+        task_type: str = "SIMPLE_EDIT",  # ✅ NEW: Task type for validation criteria
     ) -> List[ValidationResult]:
         """
         Validate ALL generated images SEQUENTIALLY with delays.
         
-        Changed from parallel to sequential to avoid rate limits with extended thinking.
+        ✅ IMPORTANT: This method no longer catches exceptions.
+        System errors (network, rate limit, etc.) will bubble up to orchestrator.
+        Only validation quality issues are returned as ValidationResult.
         
         Args:
             generated_images: List of generated images
             original_request: Original user edit request
+            original_images_bytes: List of original image bytes
+            task_type: Task type for validation criteria
             
         Returns:
-            List of ValidationResult objects (includes failures as ERROR status)
+            List of ValidationResult objects (only quality assessments)
+            
+        Raises:
+            Exception: Any system error (network, API, parsing, etc.)
         """
+        logger.info("")
+        logger.info("=" * 60)
+        logger.info("✅ SEQUENTIAL VALIDATION START")
+        logger.info("=" * 60)
+        
         logger.info(
-            f"Starting sequential validation for {len(generated_images)} images",
+            "📥 VALIDATION BATCH INPUT",
             extra={
-                "models": [img.model_name for img in generated_images]
+                "image_count": len(generated_images),
+                "models": [img.model_name for img in generated_images],
+                "num_original_images": len(original_images_bytes),
+                "task_type": task_type,
             }
         )
         
-        # Execute SEQUENTIALLY with delays between validations
-        results = []
+        validation_start = time.time()
+        
+        # ✅ NEW: No try/except - let exceptions bubble
+        validation_results = []
+        
         for i, image in enumerate(generated_images):
-            logger.info(f"Validating image {i+1}/{len(generated_images)}: {image.model_name}")
+            logger.info(
+                f"🔄 Validating image {i+1}/{len(generated_images)}: {image.model_name}"
+            )
             
-            try:
-                result = await self.validate_single(image, original_request, original_image_bytes)
-                results.append(result)
-            except Exception as e:
-                # Store exception for later handling
-                results.append(e)
+            # Call validation - any exception bubbles up immediately
+            result = await self.validate_single(
+                image,
+                original_request,
+                original_images_bytes,  # ✅ Pass all original images
+                task_type,
+            )
+            
+            validation_results.append(result)
             
             # Add delay between validations (except after last one)
             if i < len(generated_images) - 1:
-                delay = 2  # 2 seconds between validations
-                logger.info(f"⏱️ Waiting {delay} seconds before next validation (avoid rate limits)")
+                # ✅ NEW: Use config value
+                from ..utils.config import get_config
+                config = get_config()
+                delay = config.validation_delay_seconds
+                
+                logger.info(
+                    f"⏱️ Waiting {delay} seconds before next validation (avoid rate limits)"
+                )
                 await asyncio.sleep(delay)
         
-        # Separate successes from failures
-        validation_results = []
-        successful = 0
-        failed = 0
+        validation_duration = time.time() - validation_start
         
-        for i, result in enumerate(results):
-            model_name = generated_images[i].model_name
-            
-            if isinstance(result, Exception):
-                print(f"\n🔴 VALIDATION EXCEPTION for {model_name}: {type(result).__name__}: {str(result)}")
-                logger.error(
-                    f"Validation error for {model_name}: {type(result).__name__}: {str(result)}",
-                    extra={
-                        "model": model_name,
-                        "error": str(result),
-                        "error_type": type(result).__name__,
-                    }
-                )
-                # Create failed validation result
-                validation_results.append(
-                    ValidationResult(
-                        model_name=model_name,
-                        passed=False,
-                        score=0,
-                        issues=[f"Validation error: {str(result)}"],
-                        reasoning="Validation process failed",
-                        status="error",
-                    )
-                )
-                failed += 1
-            else:
-                validation_results.append(result)
-                if result.passed:
-                    successful += 1
-                else:
-                    failed += 1
+        # Calculate success statistics
+        successful = sum(1 for r in validation_results if r.passed)
+        failed = len(validation_results) - successful
+        
+        logger.info("")
+        logger.info("=" * 60)
+        logger.info("✅ SEQUENTIAL VALIDATION COMPLETE")
+        logger.info("=" * 60)
         
         logger.info(
-            f"Parallel validation complete: {successful} passed, {failed} failed/errored",
+            "📊 VALIDATION SUMMARY",
             extra={
+                "total_time_seconds": round(validation_duration, 2),
                 "total": len(generated_images),
                 "passed": successful,
                 "failed": failed,
                 "pass_rate": f"{successful/len(generated_images)*100:.1f}%",
+                "results": [
+                    {
+                        "model": r.model_name,
+                        "passed": r.passed,
+                        "score": r.score,
+                        "issues_count": len(r.issues),
+                    }
+                    for r in validation_results
+                ],
             }
         )
         

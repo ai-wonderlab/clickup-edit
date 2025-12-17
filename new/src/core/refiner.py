@@ -75,6 +75,7 @@ class Refiner:
         self,
         original_prompt: str,
         original_image_url: str,
+        original_image_bytes: bytes,  # ✅ ADD for validation
         failed_validations: List[ValidationResult],
     ) -> RefineResult:
         """
@@ -83,6 +84,7 @@ class Refiner:
         Args:
             original_prompt: Original user request
             original_image_url: URL of original image
+            original_image_bytes: Original image bytes for validation
             failed_validations: List of failed validation results
             
         Returns:
@@ -119,12 +121,14 @@ class Refiner:
         
         generated = await self.generator.generate_all_parallel(
             enhanced,
-            original_image_url
+            [original_image_url]  # ← NEW: wrap in list for multi-image support
         )
         
         validated = await self.validator.validate_all_parallel(
             generated,
-            refined_prompt  # ← Clean prompt here too!
+            refined_prompt,
+            [original_image_bytes],  # ✅ Wrap in list for multi-image support
+            "SIMPLE_EDIT",
         )
         
         logger.info(
@@ -277,7 +281,7 @@ class Refiner:
                     
                     generated = await self.generator.generate_all_parallel(
                         enhanced,
-                        current_image_url
+                        [current_image_url]  # ← NEW: wrap in list for multi-image support
                     )
                     
                     logger.info(
@@ -291,7 +295,8 @@ class Refiner:
                     validated = await self.validator.validate_all_parallel(
                         generated,
                         step,
-                        original_image_bytes
+                        [current_image_bytes],  # ✅ Wrap in list for multi-image support
+                        "SIMPLE_EDIT",
                     )
                     
                     # Find best passing result

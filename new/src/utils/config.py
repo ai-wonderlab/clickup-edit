@@ -206,3 +206,37 @@ def load_validation_prompt() -> str:
     
     with open(prompt_path, "r", encoding="utf-8") as f:
         return f.read()
+
+
+# ═══════════════════════════════════════════════════════════════
+# FONTS GUIDE LOADER (cached)
+# ═══════════════════════════════════════════════════════════════
+
+_fonts_guide_cache: Optional[str] = None
+
+
+def load_fonts_guide() -> str:
+    """
+    Load fonts translation guide (cached).
+    
+    Returns:
+        Fonts guide content or empty string if not found
+    """
+    global _fonts_guide_cache
+    
+    if _fonts_guide_cache is not None:
+        return _fonts_guide_cache
+    
+    try:
+        fonts_path = Path(__file__).parent.parent.parent / "config" / "shared" / "fonts.md"
+        if fonts_path.exists():
+            _fonts_guide_cache = fonts_path.read_text(encoding='utf-8')
+            logger.info(f"Loaded fonts guide: {len(_fonts_guide_cache)} chars")
+        else:
+            _fonts_guide_cache = ""
+            logger.warning(f"fonts.md not found at {fonts_path}")
+    except Exception as e:
+        logger.warning(f"Failed to load fonts guide: {e}")
+        _fonts_guide_cache = ""
+    
+    return _fonts_guide_cache

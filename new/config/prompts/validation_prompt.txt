@@ -7,6 +7,20 @@ User's edit request:
 
 ═══════════════════════════════════════════════════════════════
 
+IMAGE INPUT FORMAT:
+
+You will receive images in this order:
+1. ORIGINAL IMAGE(S) - one or more reference images (shown first)
+   - For SIMPLE_EDIT: Usually 1 image
+   - For BRANDED_CREATIVE: Multiple (logo + photo + sketch, etc.)
+   
+2. GENERATED RESULT - the AI-generated output (shown LAST)
+
+Your job: Evaluate if the LAST image properly incorporates/edits 
+ALL the original inputs according to the request.
+
+═══════════════════════════════════════════════════════════════
+
 VALIDATION OBJECTIVE:
 
 Verify that IMAGE 2 is VISUALLY EQUIVALENT to IMAGE 1, except for the specific changes requested by the user.
@@ -36,6 +50,7 @@ CRITICAL VALIDATION CHECKS:
    ✓ Greek uppercase: NO tone marks (ΕΚΤΟΣ not ΕΚΤΌΣ) unless in original
    ✓ Clarity: Text sharp and readable (not blurred)
    ✓ Spacing: Character spacing similar to original
+   ✓ Typography: Font style matches request (use font guide below if specified)
 
 4. UNAUTHORIZED CHANGES
    ✓ Elements not mentioned: Should look the same as original
@@ -254,6 +269,15 @@ Comparison: Number changed correctly from 20% to 30%. However, unauthorized chan
 
 ═══════════════════════════════════════════════════════════════
 
+FONT TRANSLATION REFERENCE:
+
+If the request specifies a font, use this guide to verify the
+generated typography matches the intended style:
+
+{fonts_guide}
+
+═══════════════════════════════════════════════════════════════
+
 RESPONSE FORMAT:
 
 Return ONLY this JSON structure:
@@ -289,3 +313,119 @@ Before finalizing your response, verify:
 Remember: Minor imperceptible differences are OK. Focus on what matters visually.
 
 Return ONLY valid JSON.
+
+
+
+SECTION C: BRANDED_CREATIVE VALIDATION CRITERIA
+
+Apply ONLY when task_type = BRANDED_CREATIVE
+
+For creative composition tasks (logo + photo + text compositing), evaluate:
+
+1. COMPOSITION QUALITY
+   ✓ Visual balance: Elements well distributed, not crowded or sparse
+   ✓ Clear focal point: Main message or product is prominent
+   ✓ Professional appearance: Looks like real marketing material
+   ✓ No awkward cropping: Important elements not cut off
+   ✓ Element relationships: Logo, photo, text work together harmoniously
+
+2. TEXT HIERARCHY & READABILITY
+   ✓ Headline prominence: Main text clearly stands out
+   ✓ Discount/offer emphasis: Special offers appropriately highlighted
+   ✓ Reading order: Text sizes create intuitive reading flow
+   ✓ Legibility: All text readable (not too small, sufficient contrast)
+   ✓ No text issues: Not cut off, overlapping, or running off edges
+   ✓ Greek text accuracy: Correct characters, no unwanted tones if uppercase
+
+3. LOGO INTEGRATION
+   ✓ Logo visibility: Clearly visible and recognizable
+   ✓ Logo quality: Not distorted, stretched, degraded, or malformed
+   ✓ Logo placement: Professional positioning (not awkward or obstructive)
+   ✓ Logo size: Appropriate scale (not dominating nor too small)
+   ✓ Logo clarity: Sharp edges, proper colors, intact details
+
+4. BRAND AESTHETIC ALIGNMENT (if brand_aesthetic provided)
+   ✓ Style consistency: Matches brand visual identity
+   ✓ Color harmony: Aligns with brand color palette
+   ✓ Typography feel: Font style consistent with brand character
+   ✓ Overall mood: Emotional tone matches brand personality
+   ✓ Professional execution: Meets brand quality standards
+
+5. TECHNICAL CORRECTNESS
+   ✓ Dimension accuracy: Output matches requested aspect ratio
+   ✓ Format integrity: No stretching or squashing of composition
+   ✓ Image quality: No visible artifacts, blur, or degradation
+   ✓ Color accuracy: Colors appear correct and intentional
+
+6. VISUAL CONSISTENCY (for 2nd+ dimensions)
+   ✓ Content preservation: Same text, logo, colors as previous dimension
+   ✓ Style continuity: Same visual mood and aesthetic maintained
+   ✓ Adaptive composition: Only layout adjusted for new format, not redesigned
+   ✓ Quality consistency: Same level of polish across all dimensions
+
+═══════════════════════════════════════════════════════════════
+
+BRANDED_CREATIVE SCORING:
+
+10 = Excellent creative execution
+    • Professional marketing quality, ready for immediate use
+    • Clear hierarchy, perfectly readable text
+    • Logo integrated beautifully, brand perfectly aligned
+    • Composition balanced and visually appealing
+    • Zero noticeable issues
+
+9 = Strong execution
+   • Professional quality with minor areas for polish
+   • Text readable, hierarchy clear, logo well-placed
+   • Brand aesthetic captured
+   • Very minor improvements possible but highly usable
+
+8 = Good execution (minimum PASS)
+   • Solid composition, usable quality
+   • Text readable, logo visible, basic hierarchy present
+   • Minor refinements would improve but acceptable
+   • Meets functional requirements
+
+7 = Acceptable quality but FAIL
+   • Composition has issues (balance, hierarchy unclear)
+   • Text readability concerns or logo placement awkward
+   • Needs refinement before use
+
+6 = Problematic (FAIL)
+   • Multiple composition or quality issues
+   • Text hierarchy unclear or logo problematic
+   • Brand misalignment evident
+   • Requires significant rework
+
+5 = Major issues (FAIL)
+   • Poor composition or text unreadable
+   • Logo severely degraded or misplaced
+   • Missing critical elements
+   • Not usable without major changes
+
+0-4 = Severe failure
+    • Composition broken or logo malformed
+    • Multiple catastrophic issues
+    • Completely unusable
+
+PASS = score ≥8
+FAIL = score <8
+
+═══════════════════════════════════════════════════════════════
+
+BRANDED_CREATIVE REASONING REQUIREMENTS:
+
+Provide specific observations about composition and brand execution:
+
+❌ AVOID generic statements:
+"Composition looks good"
+"Brand aligned"
+"Everything is fine"
+
+✅ PROVIDE specific assessments:
+"Headline 'WINTER SALE' prominent at top with clear hierarchy over '-70%' discount below. Logo bottom-right maintains visibility without competing"
+"Text-to-background contrast sufficient (white text on dark photo background). All text legible"
+"Composition balanced: product photo center, text top, logo bottom-right following standard brand pattern"
+"Brand aesthetic captured: minimal clean style matches enzzo.gr reference, white space preserved, elegant typography"
+
+═══════════════════════════════════════════════════════════════

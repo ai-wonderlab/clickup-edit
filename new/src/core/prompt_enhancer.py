@@ -68,9 +68,7 @@ class PromptEnhancer:
         self,
         original_prompt: str,
         model_name: str,
-        original_image_url: str,
-        original_image_bytes: Optional[bytes],  # ✅ Receive PNG
-        include_image: bool = False,
+        original_images_bytes: Optional[List[bytes]] = None,  # ✅ Multiple images
     ) -> EnhancedPrompt:
         """
         Enhance prompt for a single model.
@@ -78,6 +76,7 @@ class PromptEnhancer:
         Args:
             original_prompt: User's original edit request
             model_name: Target image model name
+            original_images_bytes: Optional list of image bytes for context
             
         Returns:
             EnhancedPrompt
@@ -92,7 +91,7 @@ class PromptEnhancer:
         
         logger.info(
             f"Enhancing prompt for {model_name}",
-            extra={"model": model_name}
+            extra={"model": model_name, "num_images": len(original_images_bytes) if original_images_bytes else 0}
         )
         
         try:
@@ -100,7 +99,7 @@ class PromptEnhancer:
                 original_prompt=original_prompt,
                 model_name=model_name,
                 deep_research=deep_research,
-                original_image_bytes=original_image_bytes if include_image else None,  # ✅ Pass bytes
+                original_images_bytes=original_images_bytes,  # ✅ Pass all images
                 cache_enabled=True,
             )
 
@@ -138,15 +137,14 @@ class PromptEnhancer:
     async def enhance_all_parallel(
         self,
         original_prompt: str,
-        original_image_url: Optional[str] = None,
-        original_image_bytes: Optional[bytes] = None,  # ✅ Receive PNG
-        include_image: bool = False,
+        original_images_bytes: Optional[List[bytes]] = None,  # ✅ Multiple images
     ) -> List[EnhancedPrompt]:
         """
         Enhance prompt for ALL models in parallel.
         
         Args:
             original_prompt: User's original edit request
+            original_images_bytes: Optional list of image bytes for context
             
         Returns:
             List of successful EnhancedPrompt objects
@@ -156,13 +154,16 @@ class PromptEnhancer:
         """
         logger.info(
             f"Starting parallel enhancement for {len(self.model_names)} models",
-            extra={"models": self.model_names}
+            extra={"models": self.model_names, "num_images": len(original_images_bytes) if original_images_bytes else 0}
         )
         
         # Create tasks for all models
         tasks = [
-            self.enhance_single(original_prompt, model_name, original_image_url, 
-                            original_image_bytes, include_image)
+            self.enhance_single(
+                original_prompt,
+                model_name,
+                original_images_bytes,
+            )
             for model_name in self.model_names
         ]
         

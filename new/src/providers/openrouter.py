@@ -2,13 +2,17 @@
 
 import json
 import base64
-from typing import Dict, Any, Optional
+import asyncio
+import time
+from typing import Dict, Any, Optional, List
 import httpx
 
 from .base import BaseProvider
 from ..utils.logger import get_logger
 from ..utils.errors import ProviderError, AuthenticationError, RateLimitError
 from ..utils.retry import retry_async
+from ..utils.images import resize_for_context
+from ..utils.config import load_fonts_guide
 from ..models.schemas import ValidationResult
 from ..models.enums import ValidationStatus
 
@@ -18,18 +22,38 @@ logger = get_logger(__name__)
 class OpenRouterClient(BaseProvider):
     """Client for OpenRouter API (Claude + Gemini)."""
     
-    def __init__(self, api_key: str, timeout: float = 120.0):
+    def __init__(self, api_key: str, timeout: float = None):
         """
         Initialize OpenRouter client.
         
         Args:
             api_key: OpenRouter API key
-            timeout: Request timeout in seconds
+            timeout: Request timeout in seconds (defaults from config)
         """
+        # ✅ NEW: Get config
+        from ..utils.config import get_config
+        config = get_config()
+        
+        # ✅ NEW: Use config timeout if not provided
+        if timeout is None:
+            timeout = config.timeout_openrouter_seconds
+        
         super().__init__(
             api_key=api_key,
             base_url="https://openrouter.ai/api/v1",
             timeout=timeout,
+        )
+        
+        # ✅ NEW: Rate limiting from config
+        self._enhancement_semaphore = asyncio.Semaphore(config.rate_limit_enhancement)
+        self._validation_semaphore = asyncio.Semaphore(config.rate_limit_validation)
+        
+        logger.info(
+            "OpenRouter rate limiting enabled",
+            extra={
+                "max_concurrent_enhancements": config.rate_limit_enhancement,
+                "max_concurrent_validations": config.rate_limit_validation,
+            }
         )
     
     def _get_default_headers(self) -> dict:
@@ -47,17 +71,69 @@ class OpenRouterClient(BaseProvider):
         original_prompt: str,
         model_name: str,
         deep_research: str,
-        original_image_bytes: Optional[bytes] = None,
+        original_images_bytes: Optional[List[bytes]] = None,  # ✅ Multiple images
         cache_enabled: bool = True,
     ) -> str:
         """Enhance user prompt using Claude with system/user split."""
         self._ensure_client()
         
-        try:
-            # ═══════════════════════════════════════════════════════════
-            # SYSTEM PROMPT = Entire deep research (activation + research)
-            # ═══════════════════════════════════════════════════════════
-            system_prompt = deep_research + """
+        logger.info("")
+        logger.info("-" * 60)
+        logger.info(f"🎨 ENHANCEMENT START - {model_name}")
+        logger.info("-" * 60)
+        
+        # ============================================
+        # INPUT LOGGING
+        # ============================================
+        logger.info(
+            "📥 ENHANCEMENT INPUT",
+            extra={
+                "model": model_name,
+                "original_prompt_length": len(original_prompt),
+                "original_prompt": original_prompt,
+                "deep_research_length": len(deep_research),
+                "images_count": len(original_images_bytes) if original_images_bytes else 0,
+                "cache_enabled": cache_enabled,
+            }
+        )
+        
+        # ✅ NEW: Acquire semaphore before API call
+        async with self._enhancement_semaphore:
+            logger.debug(
+                f"Enhancement semaphore acquired for {model_name}",
+                extra={
+                    "model": model_name,
+                    "semaphore_available": self._enhancement_semaphore._value,
+                }
+            )
+            
+            try:
+                # ═══════════════════════════════════════════════════════════
+                # SYSTEM PROMPT = Deep research + Fonts guide
+                # ═══════════════════════════════════════════════════════════
+                
+                # Add fonts guide to system prompt
+                fonts_guide = load_fonts_guide()
+                fonts_section = ""
+                if fonts_guide:
+                    fonts_section = f"""
+
+═══════════════════════════════════════════════════════════════
+FONT TRANSLATION GUIDE
+═══════════════════════════════════════════════════════════════
+When the request mentions fonts, translate to appropriate equivalents:
+
+{fonts_guide}
+
+Use standard font names that image generation models understand.
+═══════════════════════════════════════════════════════════════
+"""
+                    logger.info(
+                        "📚 FONTS INJECTED INTO ENHANCEMENT",
+                        extra={"fonts_length": len(fonts_guide)}
+                    )
+                
+                system_prompt = deep_research + fonts_section + """
 
 ═══════════════════════════════════════════════════════════════
 FINAL OUTPUT OVERRIDE:
@@ -65,11 +141,29 @@ FINAL OUTPUT OVERRIDE:
 Ignore any instructions above about warnings, recommendations, or alternatives.
 Output ONLY the enhanced prompt. No meta-commentary. No markdown headers.
 Just the pure editing instructions."""
-            
-            # ═══════════════════════════════════════════════════════════
-            # USER PROMPT = Simple enhancement request
-            # ═══════════════════════════════════════════════════════════
-            user_text = f"""Enhance this image editing request for {model_name}:
+                
+                # ═══════════════════════════════════════════════════════════
+                # USER PROMPT = Simple enhancement request + multi-image context
+                # ═══════════════════════════════════════════════════════════
+                
+                # Add multi-image context if multiple images
+                multi_image_context = ""
+                if original_images_bytes and len(original_images_bytes) > 1:
+                    multi_image_context = f"""
+[MULTI-IMAGE INPUT]
+You are viewing {len(original_images_bytes)} reference images:
+- Image 1: Primary subject (usually logo or main product)
+- Image 2+: Additional elements (photos, textures, references)
+
+The edit should thoughtfully incorporate ALL provided images.
+
+"""
+                    logger.info(
+                        "🖼️ MULTI-IMAGE CONTEXT ADDED",
+                        extra={"image_count": len(original_images_bytes)}
+                    )
+                
+                user_text = f"""{multi_image_context}Enhance this image editing request for {model_name}:
 
 {original_prompt}
 
@@ -83,119 +177,168 @@ CRITICAL OUTPUT REQUIREMENTS:
 - Output must be copy-paste ready for the image editing API
 
 Your output MUST be the pure prompt with zero additional text."""
-            
-            # ═══════════════════════════════════════════════════════════
-            # BUILD USER CONTENT (text + optional image)
-            # ═══════════════════════════════════════════════════════════
-            user_content = [
-                {
-                    "type": "text",
-                    "text": user_text
-                }
-            ]
-            
-            # Add image if provided
-            if original_image_bytes:
-                img_b64 = base64.b64encode(original_image_bytes).decode('utf-8')
-                user_content.append({
-                    "type": "image_url",
-                    "image_url": {
-                        "url": f"data:image/png;base64,{img_b64}"
+                
+                # ═══════════════════════════════════════════════════════════
+                # BUILD USER CONTENT (text + optional images)
+                # ═══════════════════════════════════════════════════════════
+                user_content = [
+                    {
+                        "type": "text",
+                        "text": user_text
                     }
-                })
-            
-            # ═══════════════════════════════════════════════════════════
-            # BUILD MESSAGES (system/user split)
-            # ═══════════════════════════════════════════════════════════
-            messages = [
-                {
-                    "role": "system",
-                    "content": system_prompt  # ✅ All research & activation
-                },
-                {
-                    "role": "user",
-                    "content": user_content  # ✅ Simple request + image
-                }
-            ]
-            
-            # ═══════════════════════════════════════════════════════════
-            # BUILD PAYLOAD with LOCKED PARAMETERS
-            # ═══════════════════════════════════════════════════════════
-            payload = {
-                "model": "anthropic/claude-sonnet-4.5",
-                "messages": messages,
-                "max_tokens": 2000,
-                # temperature removed - defaults to 1.0 (required for thinking)
+                ]
                 
-                # ✅ ADD THINKING MODE
-                "reasoning": {
-                    "effort": "high"  # High
-                },
+                # Add images if provided (resized for context efficiency)
+                if original_images_bytes:
+                    for i, img_bytes in enumerate(original_images_bytes):
+                        resized = resize_for_context(img_bytes, max_dimension=512, quality=70)
+                        img_b64 = base64.b64encode(resized).decode('utf-8')
+                        user_content.append({
+                            "type": "image_url",
+                            "image_url": {
+                                "url": f"data:image/jpeg;base64,{img_b64}"
+                            }
+                        })
+                        logger.info(
+                            f"🖼️ IMAGE {i+1} RESIZED FOR CONTEXT",
+                            extra={
+                                "image_index": i,
+                                "original_size_kb": round(len(img_bytes) / 1024, 2),
+                                "resized_size_kb": round(len(resized) / 1024, 2),
+                            }
+                        )
                 
-                # ✅ LOCK PROVIDER
-                "provider": {
-                    "order": ["Anthropic"],
-                    "allow_fallbacks": False
-                }
-            }
-            
-            # ═══════════════════════════════════════════════════════════
-            # API CALL
-            # ═══════════════════════════════════════════════════════════
-            response = await self.client.post(
-                f"{self.base_url}/chat/completions",
-                json=payload,
-                timeout=None
-            )
-            
-            self._handle_response_errors(response)
-            
-            data = response.json()
-            
-            # ═══════════════════════════════════════════════════════════
-            # VERIFY NO FALLBACK
-            # ═══════════════════════════════════════════════════════════
-            actual_model = data.get("model", "unknown")
-            
-            if actual_model != "anthropic/claude-sonnet-4.5":
-                logger.warning(
-                    f"Provider fallback in enhancement: {actual_model}",
+                # ═══════════════════════════════════════════════════════════
+                # BUILD MESSAGES (system/user split)
+                # ═══════════════════════════════════════════════════════════
+                messages = [
+                    {
+                        "role": "system",
+                        "content": system_prompt  # ✅ All research & activation
+                    },
+                    {
+                        "role": "user",
+                        "content": user_content  # ✅ Simple request + image
+                    }
+                ]
+                
+                logger.info(
+                    "📝 ENHANCEMENT PROMPT TO CLAUDE",
                     extra={
-                        "expected": "anthropic/claude-sonnet-4.5",
-                        "actual": actual_model,
-                        "image_model": model_name
+                        "model": model_name,
+                        "system_prompt_length": len(system_prompt),
+                        "user_prompt_length": len(user_text),
+                        "total_images": len(original_images_bytes) if original_images_bytes else 0,
                     }
                 )
-            
-            logger.info(
-                "Enhancement complete",
-                extra={
-                    "model_requested": "anthropic/claude-sonnet-4.5",
-                    "model_actual": actual_model,
-                    "image_model": model_name,
-                    "has_image": original_image_bytes is not None
+                
+                # ═══════════════════════════════════════════════════════════
+                # BUILD PAYLOAD with LOCKED PARAMETERS
+                # ═══════════════════════════════════════════════════════════
+                payload = {
+                    "model": "anthropic/claude-sonnet-4.5",
+                    "messages": messages,
+                    "max_tokens": 2000,
+                    # temperature removed - defaults to 1.0 (required for thinking)
+                    
+                    # ✅ ADD THINKING MODE
+                    "reasoning": {
+                        "effort": "high"  # High
+                    },
+                    
+                    # ✅ LOCK PROVIDER
+                    "provider": {
+                        "order": ["Anthropic"],
+                        "allow_fallbacks": False
+                    }
                 }
-            )
+                
+                # ═══════════════════════════════════════════════════════════
+                # API CALL
+                # ═══════════════════════════════════════════════════════════
+                logger.info("🌐 CALLING CLAUDE API FOR ENHANCEMENT...")
+                api_start = time.time()
+                
+                response = await self.client.post(
+                    f"{self.base_url}/chat/completions",
+                    json=payload,
+                    timeout=None
+                )
+                
+                api_duration = time.time() - api_start
+                
+                self._handle_response_errors(response)
+                
+                data = response.json()
+                
+                # ═══════════════════════════════════════════════════════════
+                # VERIFY NO FALLBACK
+                # ═══════════════════════════════════════════════════════════
+                actual_model = data.get("model", "unknown")
+                
+                if actual_model != "anthropic/claude-sonnet-4.5":
+                    logger.warning(
+                        f"Provider fallback in enhancement: {actual_model}",
+                        extra={
+                            "expected": "anthropic/claude-sonnet-4.5",
+                            "actual": actual_model,
+                            "image_model": model_name
+                        }
+                    )
+                
+                # ═══════════════════════════════════════════════════════════
+                # RETURN ENHANCED PROMPT
+                # ═══════════════════════════════════════════════════════════
+                enhanced = data["choices"][0]["message"]["content"]
+                enhanced = enhanced.strip()
+                
+                # ============================================
+                # RESULT LOGGING
+                # ============================================
+                logger.info("")
+                logger.info(
+                    f"✅ ENHANCEMENT COMPLETE - {model_name}",
+                    extra={
+                        "model": model_name,
+                        "api_duration_seconds": round(api_duration, 2),
+                        "original_length": len(original_prompt),
+                        "enhanced_length": len(enhanced),
+                    }
+                )
+                
+                logger.info(
+                    "📤 ENHANCED PROMPT",
+                    extra={
+                        "model": model_name,
+                        "enhanced_prompt": enhanced,
+                    }
+                )
+                
+                return enhanced
+                
+            except Exception as e:
+                logger.error(
+                    f"Enhancement failed for {model_name}",
+                    extra={
+                        "model": model_name,
+                        "error": str(e),
+                        "error_type": type(e).__name__,
+                    },
+                    exc_info=True
+                )
+                
+                # ✅ NEW: Raise exception - let orchestrator decide how to handle
+                from ..utils.errors import EnhancementError
+                raise EnhancementError(
+                    f"Failed to enhance prompt for {model_name}: {str(e)}"
+                )
             
-            # ═══════════════════════════════════════════════════════════
-            # RETURN ENHANCED PROMPT
-            # ═══════════════════════════════════════════════════════════
-            enhanced = data["choices"][0]["message"]["content"]
-            return enhanced.strip()
-            
-        except Exception as e:
-            logger.error(
-                f"Enhancement failed: {e}",
-                extra={
-                    "model": model_name,
-                    "error": str(e)
-                },
-                exc_info=True
-            )
-            
-            # Fallback: return original prompt
-            logger.warning(f"Returning original prompt due to enhancement failure")
-            return original_prompt
+            finally:
+                logger.debug(
+                    f"Enhancement semaphore released for {model_name}",
+                    extra={"model": model_name}
+                )
+                # Semaphore auto-released by context manager
     
     @retry_async(max_attempts=3, exceptions=(httpx.RequestError, ProviderError))
     async def validate_image(
@@ -209,227 +352,251 @@ Your output MUST be the pure prompt with zero additional text."""
         """Validate edited image using Claude with system/user split."""
         self._ensure_client()
         
-        try:
-            # ═══════════════════════════════════════════════════════════
-            # SYSTEM PROMPT = Entire validation prompt (290 lines)
-            # ═══════════════════════════════════════════════════════════
-            system_prompt = validation_prompt_template
+        # ✅ NEW: Acquire semaphore before API call
+        async with self._validation_semaphore:
+            logger.debug(
+                f"Validation semaphore acquired for {model_name}",
+                extra={
+                    "model": model_name,
+                    "semaphore_available": self._validation_semaphore._value,
+                }
+            )
             
-            # ═══════════════════════════════════════════════════════════
-            # USER PROMPT = Simple task
-            # ═══════════════════════════════════════════════════════════
-            user_text = f"""Validate this edit.
+            try:
+                # ═══════════════════════════════════════════════════════════
+                # SYSTEM PROMPT = Entire validation prompt (290 lines)
+                # ═══════════════════════════════════════════════════════════
+                system_prompt = validation_prompt_template
+                
+                # ═══════════════════════════════════════════════════════════
+                # USER PROMPT = Simple task
+                # ═══════════════════════════════════════════════════════════
+                user_text = f"""Validate this edit.
 
 USER REQUEST: {original_request}
 
 Compare IMAGE 1 (original) with IMAGE 2 (edited).
 Return ONLY JSON."""
-            
-            # ═══════════════════════════════════════════════════════════
-            # PREPARE IMAGES
-            # ═══════════════════════════════════════════════════════════
-            # Original image: bytes → base64
-            original_b64 = base64.b64encode(original_image_bytes).decode('utf-8')
-            original_data_url = f"data:image/png;base64,{original_b64}"
-            
-            # Edited image: download from URL
-            # ✅ NEW CODE (WORKS):
-            # Edited image: download from URL and FORCE convert to PNG
-            logger.info("📥 Downloading edited image for validation")
-            async with httpx.AsyncClient(timeout=30.0) as download_client:
-                edited_response = await download_client.get(image_url)
-                edited_response.raise_for_status()
-                edited_bytes = edited_response.content
-
-            # ✅ FORCE CONVERT TO PNG (regardless of source format)
-            from PIL import Image
-            import io
-
-            logger.info("🔄 Converting edited image to PNG format")
-            edited_img = Image.open(io.BytesIO(edited_bytes))
-            edited_png_buffer = io.BytesIO()
-            edited_img.save(edited_png_buffer, format='PNG')
-            edited_png_bytes = edited_png_buffer.getvalue()
-            logger.info("lets go man")
-            edited_b64 = base64.b64encode(edited_png_bytes).decode('utf-8')
-            edited_data_url = f"data:image/png;base64,{edited_b64}"
-
-            logger.info(f"✅ Image converted: {len(edited_bytes)/1024:.1f}KB → {len(edited_png_bytes)/1024:.1f}KB PNG")
-            
-            logger.info("✅ Both images prepared for validation")
-            
-            # ═══════════════════════════════════════════════════════════
-            # BUILD MESSAGES (system/user split)
-            # ═══════════════════════════════════════════════════════════
-            messages = [
-                {
-                    "role": "system",
-                    "content": system_prompt  # ✅ All validation instructions
-                },
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "text",
-                            "text": user_text
-                        },
-                        {
-                            "type": "image_url",
-                            "image_url": {
-                                "url": original_data_url
-                            }
-                        },
-                        {
-                            "type": "image_url",
-                            "image_url": {
-                                "url": edited_data_url
-                            }
-                        }
-                    ]
-                }
-            ]
-            
-            # ═══════════════════════════════════════════════════════════
-            # BUILD PAYLOAD with LOCKED PARAMETERS
-            # ═══════════════════════════════════════════════════════════
-            payload = {
-                "model": "anthropic/claude-sonnet-4.5",
-                "messages": messages,
-                "max_tokens": 2000,
-                # temperature removed - defaults to 1.0 (required for thinking)
-
-                "reasoning": {
-                    "effort": "high"
-                },
                 
-                # ✅ LOCK PROVIDER (prevent fallbacks)
-                "provider": {
-                    "order": ["Anthropic"],
-                    "allow_fallbacks": False
+                # ═══════════════════════════════════════════════════════════
+                # PREPARE IMAGES
+                # ═══════════════════════════════════════════════════════════
+                # Original image: bytes → base64
+                original_b64 = base64.b64encode(original_image_bytes).decode('utf-8')
+                original_data_url = f"data:image/png;base64,{original_b64}"
+                
+                # Edited image: download from URL
+                # ✅ NEW CODE (WORKS):
+                # Edited image: download from URL and FORCE convert to PNG
+                logger.info("📥 Downloading edited image for validation")
+                async with httpx.AsyncClient(timeout=30.0) as download_client:
+                    edited_response = await download_client.get(image_url)
+                    edited_response.raise_for_status()
+                    edited_bytes = edited_response.content
+
+                # ✅ SMART FORMAT HANDLING: Keep JPEG as JPEG, convert others to PNG
+                from PIL import Image
+                import io
+
+                edited_img = Image.open(io.BytesIO(edited_bytes))
+                image_format = edited_img.format  # JPEG, PNG, etc.
+                
+                if image_format == 'JPEG':
+                    # Keep JPEG as-is (much smaller for validation)
+                    logger.info(f"✅ Keeping JPEG format for validation ({len(edited_bytes)/1024:.1f}KB)")
+                    edited_b64 = base64.b64encode(edited_bytes).decode('utf-8')
+                    edited_data_url = f"data:image/jpeg;base64,{edited_b64}"
+                else:
+                    # Convert to PNG for other formats
+                    logger.info(f"🔄 Converting {image_format} to PNG format")
+                    edited_png_buffer = io.BytesIO()
+                    edited_img.save(edited_png_buffer, format='PNG')
+                    edited_png_bytes = edited_png_buffer.getvalue()
+                    edited_b64 = base64.b64encode(edited_png_bytes).decode('utf-8')
+                    edited_data_url = f"data:image/png;base64,{edited_b64}"
+                    logger.info(f"✅ Image converted: {len(edited_bytes)/1024:.1f}KB → {len(edited_png_bytes)/1024:.1f}KB PNG")
+                
+                logger.info("✅ Both images prepared for validation")
+                
+                # ═══════════════════════════════════════════════════════════
+                # BUILD MESSAGES (system/user split)
+                # ═══════════════════════════════════════════════════════════
+                messages = [
+                    {
+                        "role": "system",
+                        "content": system_prompt  # ✅ All validation instructions
+                    },
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "text",
+                                "text": user_text
+                            },
+                            {
+                                "type": "image_url",
+                                "image_url": {
+                                    "url": original_data_url
+                                }
+                            },
+                            {
+                                "type": "image_url",
+                                "image_url": {
+                                    "url": edited_data_url
+                                }
+                            }
+                        ]
+                    }
+                ]
+                
+                # ═══════════════════════════════════════════════════════════
+                # BUILD PAYLOAD with LOCKED PARAMETERS
+                # ═══════════════════════════════════════════════════════════
+                payload = {
+                    "model": "anthropic/claude-sonnet-4.5",
+                    "messages": messages,
+                    "max_tokens": 2000,
+                    # temperature removed - defaults to 1.0 (required for thinking)
+
+                    "reasoning": {
+                        "effort": "high"
+                    },
+                    
+                    # ✅ LOCK PROVIDER (prevent fallbacks)
+                    "provider": {
+                        "order": ["Anthropic"],
+                        "allow_fallbacks": False
+                    }
                 }
-            }
-            
-            # ═══════════════════════════════════════════════════════════
-            # DEBUG LOGGING
-            # ═══════════════════════════════════════════════════════════
-            logger.error(
-                f"🔍 DEBUG VALIDATION REQUEST for {model_name}",
-                extra={
-                    "model": payload["model"],
-                    "original_size_kb": len(original_b64) * 0.75 / 1024,
-                    "edited_size_kb": len(edited_b64) * 0.75 / 1024,
-                    "system_prompt_length": len(system_prompt),
-                    "max_tokens": payload["max_tokens"],
-                    "has_reasoning": "reasoning" in payload
-                }
-            )
-            
-            # ═══════════════════════════════════════════════════════════
-            # API CALL
-            # ═══════════════════════════════════════════════════════════
-            response = await self.client.post(
-                f"{self.base_url}/chat/completions",
-                json=payload,
-            )
-            
-            self._handle_response_errors(response)
-            
-            data = response.json()
-            
-            # ═══════════════════════════════════════════════════════════
-            # VERIFY NO FALLBACK
-            # ═══════════════════════════════════════════════════════════
-            actual_model = data.get("model", "unknown")
-            
-            logger.info(
-                "Validation complete",
-                extra={
-                    "model_requested": "anthropic/claude-sonnet-4.5",
-                    "model_actual": actual_model,
-                    "provider_locked": True,
-                    "image_model": model_name
-                }
-            )
-            
-            # Alert if fallback occurred
-            if actual_model != "anthropic/claude-sonnet-4.5":
+                
+                # ═══════════════════════════════════════════════════════════
+                # DEBUG LOGGING
+                # ═══════════════════════════════════════════════════════════
                 logger.error(
-                    "🚨 PROVIDER FALLBACK DETECTED",
+                    f"🔍 DEBUG VALIDATION REQUEST for {model_name}",
                     extra={
-                        "expected": "anthropic/claude-sonnet-4.5",
-                        "actual": actual_model
+                        "model": payload["model"],
+                        "original_size_kb": len(original_b64) * 0.75 / 1024,
+                        "edited_size_kb": len(edited_b64) * 0.75 / 1024,
+                        "system_prompt_length": len(system_prompt),
+                        "max_tokens": payload["max_tokens"],
+                        "has_reasoning": "reasoning" in payload
                     }
                 )
+                
+                # ═══════════════════════════════════════════════════════════
+                # API CALL
+                # ═══════════════════════════════════════════════════════════
+                response = await self.client.post(
+                    f"{self.base_url}/chat/completions",
+                    json=payload,
+                )
+                
+                self._handle_response_errors(response)
+                
+                data = response.json()
+                
+                # ═══════════════════════════════════════════════════════════
+                # VERIFY NO FALLBACK
+                # ═══════════════════════════════════════════════════════════
+                actual_model = data.get("model", "unknown")
+                
+                logger.info(
+                    "Validation complete",
+                    extra={
+                        "model_requested": "anthropic/claude-sonnet-4.5",
+                        "model_actual": actual_model,
+                        "provider_locked": True,
+                        "image_model": model_name
+                    }
+                )
+                
+                # Alert if fallback occurred
+                if actual_model != "anthropic/claude-sonnet-4.5":
+                    logger.error(
+                        "🚨 PROVIDER FALLBACK DETECTED",
+                        extra={
+                            "expected": "anthropic/claude-sonnet-4.5",
+                            "actual": actual_model
+                        }
+                    )
+                
+                # ═══════════════════════════════════════════════════════════
+                # PARSE JSON RESPONSE
+                # ═══════════════════════════════════════════════════════════
+                content = data["choices"][0]["message"]["content"]
+                
+                # Strip markdown code blocks if present
+                import re
+                content = re.sub(r'```json\s*', '', content)
+                content = re.sub(r'```\s*$', '', content)
+                content = content.strip()
+                
+                # Parse JSON
+                result_data = json.loads(content)
+                
+                # Validate structure
+                required_keys = ["pass_fail", "score", "issues", "reasoning"]
+                if not all(key in result_data for key in required_keys):
+                    raise ValueError(f"Missing required keys: {required_keys}")
+                
+                # Validate pass_fail value
+                if result_data["pass_fail"] not in ["PASS", "FAIL"]:
+                    raise ValueError(f"Invalid pass_fail value: {result_data['pass_fail']}")
+                
+                # Build result
+                return ValidationResult(
+                    model_name=model_name,
+                    passed=(result_data["pass_fail"] == "PASS"),
+                    score=result_data["score"],
+                    issues=result_data["issues"],
+                    reasoning=result_data["reasoning"],
+                    status=ValidationStatus.PASS if result_data["pass_fail"] == "PASS" else ValidationStatus.FAIL,
+                )
+                
+            except json.JSONDecodeError as e:
+                logger.error(
+                    f"JSON parse error: {e}",
+                    extra={
+                        "raw_content": content[:500] if 'content' in locals() else "N/A",
+                        "model": model_name
+                    }
+                )
+                
+                return ValidationResult(
+                    model_name=model_name,
+                    passed=False,
+                    score=0,
+                    issues=[f"JSON parse error: {str(e)}"],
+                    reasoning="Validation response was not valid JSON",
+                    status=ValidationStatus.ERROR,
+                )
+                
+            except Exception as e:
+                logger.error(
+                    f"Validation failed: {e}",
+                    extra={
+                        "model": model_name,
+                        "error": str(e)
+                    },
+                    exc_info=True
+                )
+                
+                return ValidationResult(
+                    model_name=model_name,
+                    passed=False,
+                    score=0,
+                    issues=[f"Validation error: {str(e)}"],
+                    reasoning="Validation process failed",
+                    status=ValidationStatus.ERROR,
+                )
             
-            # ═══════════════════════════════════════════════════════════
-            # PARSE JSON RESPONSE
-            # ═══════════════════════════════════════════════════════════
-            content = data["choices"][0]["message"]["content"]
-            
-            # Strip markdown code blocks if present
-            import re
-            content = re.sub(r'```json\s*', '', content)
-            content = re.sub(r'```\s*$', '', content)
-            content = content.strip()
-            
-            # Parse JSON
-            result_data = json.loads(content)
-            
-            # Validate structure
-            required_keys = ["pass_fail", "score", "issues", "reasoning"]
-            if not all(key in result_data for key in required_keys):
-                raise ValueError(f"Missing required keys: {required_keys}")
-            
-            # Validate pass_fail value
-            if result_data["pass_fail"] not in ["PASS", "FAIL"]:
-                raise ValueError(f"Invalid pass_fail value: {result_data['pass_fail']}")
-            
-            # Build result
-            return ValidationResult(
-                model_name=model_name,
-                passed=(result_data["pass_fail"] == "PASS"),
-                score=result_data["score"],
-                issues=result_data["issues"],
-                reasoning=result_data["reasoning"],
-                status=ValidationStatus.PASS if result_data["pass_fail"] == "PASS" else ValidationStatus.FAIL,
-            )
-            
-        except json.JSONDecodeError as e:
-            logger.error(
-                f"JSON parse error: {e}",
-                extra={
-                    "raw_content": content[:500] if 'content' in locals() else "N/A",
-                    "model": model_name
-                }
-            )
-            
-            return ValidationResult(
-                model_name=model_name,
-                passed=False,
-                score=0,
-                issues=[f"JSON parse error: {str(e)}"],
-                reasoning="Validation response was not valid JSON",
-                status=ValidationStatus.ERROR,
-            )
-            
-        except Exception as e:
-            logger.error(
-                f"Validation failed: {e}",
-                extra={
-                    "model": model_name,
-                    "error": str(e)
-                },
-                exc_info=True
-            )
-            
-            return ValidationResult(
-                model_name=model_name,
-                passed=False,
-                score=0,
-                issues=[f"Validation error: {str(e)}"],
-                reasoning="Validation process failed",
-                status=ValidationStatus.ERROR,
-            )
+            finally:
+                logger.debug(
+                    f"Validation semaphore released for {model_name}",
+                    extra={"model": model_name}
+                )
+                # Semaphore auto-released by context manager
     
     def _parse_validation_response(
         self,
@@ -531,7 +698,9 @@ Return ONLY JSON."""
             reasoning = data.get("reasoning", "")
             
             # Validate pass_fail matches score
-            expected_pass = "PASS" if score >= 8 else "FAIL"
+            from ..utils.config import get_config
+            config = get_config()
+            expected_pass = "PASS" if score >= config.validation_pass_threshold else "FAIL"
             if pass_fail != expected_pass:
                 logger.warning(
                     f"Inconsistent validation: pass_fail={pass_fail} but score={score}",

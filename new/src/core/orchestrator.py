@@ -127,6 +127,9 @@ class Orchestrator:
         prompt: str,
         original_image_url: str,
         original_image_bytes: bytes,  # ✅ Receive PNG bytes
+        task_type: str = "SIMPLE_EDIT",  # ✅ NEW: Task type for validation criteria
+        additional_image_urls: List[str] = None,  # ✅ NEW: Additional images for multi-image generation
+        additional_image_bytes: List[bytes] = None,  # ✅ NEW: Additional image bytes for context
     ) -> ProcessResult:
         """
         Process edit request with iterative refinement.
@@ -135,6 +138,7 @@ class Orchestrator:
             task_id: ClickUp task ID
             prompt: User's edit request
             original_image_url: URL of original image
+            task_type: Task type for validation (SIMPLE_EDIT or BRANDED_CREATIVE)
             
         Returns:
             ProcessResult with final outcome
@@ -148,6 +152,15 @@ class Orchestrator:
                 "max_iterations": self.max_iterations,
             }
         )
+        
+        # Build combined image lists for multi-image support
+        all_image_urls = [original_image_url]
+        if additional_image_urls:
+            all_image_urls.extend(additional_image_urls)
+        
+        all_image_bytes = [original_image_bytes]
+        if additional_image_bytes:
+            all_image_bytes.extend(additional_image_bytes)
         
         current_prompt = prompt
         all_iterations: List[IterationMetrics] = []
@@ -172,33 +185,63 @@ class Orchestrator:
                 # 🎯 ENHANCEMENT PHASE
                 enhanced = await self.enhancer.enhance_all_parallel(
                     current_prompt,
-                    original_image_url=original_image_url,
-                    original_image_bytes=original_image_bytes,  # ✅ Pass bytes
-                    include_image=include_image
+                    original_images_bytes=all_image_bytes if include_image else None,
                 )
                 
                 if include_image:
                     logger.info(
-                        "🖼️ Sent original image to Claude for context-aware enhancement",
-                        extra={"iteration": iteration}
+                        "🖼️ Sent original image(s) to Claude for context-aware enhancement",
+                        extra={"iteration": iteration, "num_images": len(all_image_bytes)}
                     )
                 
                 # Phase 2: Parallel Generation
                 logger.info("Phase 2: Generation", extra={"iteration": iteration})
+                
                 generated = await self.generator.generate_all_parallel(
                     enhanced,
-                    original_image_url
+                    all_image_urls  # ← Pass list of all images
                 )
                 
                 # Phase 3: Parallel Validation
                 logger.info("Phase 3: Validation", extra={"iteration": iteration})
-                validated = await self.validator.validate_all_parallel(
-                    generated,
-                    current_prompt,
-                    original_image_bytes  # ✅ Pass bytes
-                )
                 
-                all_validation_results.extend(validated)
+                try:
+                    validated = await self.validator.validate_all_parallel(
+                        generated,
+                        current_prompt,
+                        all_image_bytes,  # ✅ Pass all original image bytes
+                        task_type,  # ✅ Pass task type for validation criteria
+                    )
+                    
+                    all_validation_results.extend(validated)
+                    
+                except Exception as validation_error:
+                    # ✅ NEW: Distinguish validation system errors from quality failures
+                    logger.error(
+                        f"Validation system error in iteration {iteration}",
+                        extra={
+                            "task_id": task_id,
+                            "iteration": iteration,
+                            "error": str(validation_error),
+                            "error_type": type(validation_error).__name__,
+                        },
+                        exc_info=True
+                    )
+                    
+                    # If this was the last iteration, fail
+                    if iteration == self.max_iterations:
+                        logger.error(
+                            f"Validation failed in final iteration, triggering hybrid fallback",
+                            extra={"task_id": task_id}
+                        )
+                        break
+                    
+                    # Otherwise, retry next iteration
+                    logger.warning(
+                        f"Validation failed, retrying iteration {iteration + 1}",
+                        extra={"task_id": task_id, "iteration": iteration}
+                    )
+                    continue
                 
                 # Record iteration metrics
                 iteration_metrics = IterationMetrics(
@@ -327,6 +370,7 @@ class Orchestrator:
                     refinement = await self.refiner.refine_with_feedback(
                         prompt,
                         original_image_url,
+                        original_image_bytes,  # ✅ ADD bytes for validation
                         validated,
                     )
 

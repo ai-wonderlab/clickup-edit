@@ -14,6 +14,8 @@ from .core import (
     Refiner, 
     HybridFallback, 
     Orchestrator,
+    Classifier,
+    BrandAnalyzer,
 )
 from .utils.config import load_config, get_config
 from .utils.logger import get_logger
@@ -86,6 +88,12 @@ async def lifespan(app: FastAPI):
             clickup_client=clickup,
         )
         
+        # Initialize classifier
+        classifier = Classifier(openrouter_client=openrouter)
+        
+        # Initialize brand analyzer
+        brand_analyzer = BrandAnalyzer(openrouter_client=openrouter)
+        
         max_iterations = config.processing.max_iterations if config.processing else 3
         
         # ============================================================================
@@ -115,6 +123,8 @@ async def lifespan(app: FastAPI):
         app.state.validator = validator
         app.state.refiner = refiner
         app.state.hybrid_fallback = hybrid_fallback
+        app.state.classifier = classifier
+        app.state.brand_analyzer = brand_analyzer
         
         # Store BOTH orchestrators
         app.state.orchestrator = orchestrator           # OLD (fallback)

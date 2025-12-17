@@ -197,3 +197,64 @@ def compress_if_needed(
     except Exception as e:
         logger.warning(f"Failed to compress image: {e}. Using original.")
         return image_bytes
+
+
+def resize_for_context(
+    image_bytes: bytes,
+    max_dimension: int = 512,
+    quality: int = 70,
+) -> bytes:
+    """
+    Resize image for Claude context (lower quality to save tokens).
+    
+    Args:
+        image_bytes: Original image bytes
+        max_dimension: Max width or height (default 512px)
+        quality: JPEG quality 1-100 (default 70)
+        
+    Returns:
+        Resized image bytes (JPEG)
+    """
+    try:
+        image = Image.open(BytesIO(image_bytes))
+        
+        # Convert to RGB if needed (for JPEG)
+        if image.mode in ('RGBA', 'P'):
+            image = image.convert('RGB')
+        
+        width, height = image.size
+        
+        # Already small enough - just compress
+        if max(width, height) <= max_dimension:
+            buffer = BytesIO()
+            image.save(buffer, format='JPEG', quality=quality)
+            return buffer.getvalue()
+        
+        # Calculate new dimensions maintaining aspect ratio
+        if width > height:
+            new_width = max_dimension
+            new_height = int(height * (max_dimension / width))
+        else:
+            new_height = max_dimension
+            new_width = int(width * (max_dimension / height))
+        
+        # Resize with high-quality resampling
+        img_resized = image.resize((new_width, new_height), Image.LANCZOS)
+        
+        # Convert to JPEG bytes
+        buffer = BytesIO()
+        img_resized.save(buffer, format='JPEG', quality=quality)
+        
+        logger.debug(
+            f"Resized for context: {width}x{height} -> {new_width}x{new_height}",
+            extra={
+                "original_kb": len(image_bytes) / 1024,
+                "resized_kb": len(buffer.getvalue()) / 1024,
+            }
+        )
+        
+        return buffer.getvalue()
+        
+    except Exception as e:
+        logger.warning(f"Failed to resize image for context: {e}, using original")
+        return image_bytes

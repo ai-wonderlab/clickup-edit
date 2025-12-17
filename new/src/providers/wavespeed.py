@@ -2,7 +2,8 @@
 
 import httpx
 import asyncio
-from typing import Optional, Dict, Any
+import time
+from typing import Optional, Dict, Any, List
 
 from .base import BaseProvider
 from ..utils.logger import get_logger
@@ -15,7 +16,13 @@ logger = get_logger(__name__)
 class WaveSpeedAIClient(BaseProvider):
     """Client for WaveSpeedAI image editing API."""
     
-    def __init__(self, api_key: str, timeout: float = 120.0):
+    def __init__(self, api_key: str, timeout: Optional[float] = None):
+        # ✅ NEW: Use config value if not explicitly provided
+        if timeout is None:
+            from ..utils.config import get_config
+            config = get_config()
+            timeout = config.timeout_wavespeed_seconds
+        
         super().__init__(
             api_key=api_key,
             base_url="https://api.wavespeed.ai/api/v3",
@@ -32,15 +39,25 @@ class WaveSpeedAIClient(BaseProvider):
     async def generate_image(
         self,
         prompt: str,
-        original_image_url: str,
+        image_urls: List[str],  # ← CHANGED: Now accepts list of URLs
         model_name: str,
     ) -> tuple[bytes, str]:
         """Generate edited image using WaveSpeed API.
+        
+        Args:
+            prompt: The edit prompt
+            image_urls: List of image URLs to use (supports multi-image)
+            model_name: The model to use
         
         Returns:
             Tuple of (image_bytes, cloudfront_url)
         """
         self._ensure_client()
+        
+        logger.info("")
+        logger.info("-" * 60)
+        logger.info(f"🚀 WAVESPEED API START - {model_name}")
+        logger.info("-" * 60)
         
         # CORRECT model mapping with REAL endpoints
         model_mapping = {
@@ -48,13 +65,15 @@ class WaveSpeedAIClient(BaseProvider):
             "qwen-edit-plus": "wavespeed-ai/qwen-image/edit-plus",
             "wan-2.5-edit": "alibaba/wan-2.5/image-edit",
             "nano-banana": "google/nano-banana/edit",
+            "nano-banana-pro": "google/nano-banana-pro/edit",  # ✅ NEW: Pro version
+            "nano-banana-pro/edit-ultra": "google/nano-banana-pro/edit-ultra",  # ✅ NEW: Ultra version
         }
         
         model_id = model_mapping.get(model_name, model_name)
         
         # CORRECT payload structure - uses "images" array!
         payload = {
-            "images": [original_image_url],  # Array, not single string!
+            "images": image_urls,  # ← CHANGED: Use the list directly
             "prompt": prompt,
             "enable_base64_output": False,
             "enable_sync_mode": False,
@@ -64,22 +83,41 @@ class WaveSpeedAIClient(BaseProvider):
         if "qwen" in model_name.lower():
             payload["seed"] = -1
             payload["output_format"] = "jpeg"
+        elif "nano-banana-pro/edit-ultra" in model_name.lower():
+            # ✅ nano-banana-pro ULTRA specific settings
+            # NOTE: Check ultra FIRST (more specific) before regular nano-banana-pro
+            payload["output_format"] = "jpeg"
+            payload["resolution"] = "4k"  # Ultra supports 4K natively
+        elif "nano-banana-pro" in model_name.lower():
+            # ✅ nano-banana-pro specific settings
+            # NOTE: aspect_ratio NOT specified = preserves input image dimensions
+            payload["output_format"] = "jpeg"  # JPEG much smaller than PNG (60-80% reduction)
+            payload["resolution"] = "1k"  # 1K resolution - 2K still exceeds 5MB after base64 encoding
         elif "nano-banana" in model_name.lower():
             payload["output_format"] = "jpeg"
         elif "wan" in model_name.lower():
             payload["seed"] = -1
         
+        logger.info(
+            "� WAVESPEED INPUT",
+            extra={
+                "model": model_name,
+                "model_id": model_id,
+                "prompt_length": len(prompt),
+                "prompt_full": prompt,
+                "image_count": len(image_urls),
+                "image_urls": image_urls,
+            }
+        )
+        
+        logger.info(
+            "📦 WAVESPEED PAYLOAD",
+            extra={"payload": payload}
+        )
+        
+        gen_start = time.time()
+        
         try:
-            logger.info(
-                f"🚀 Submitting to WaveSpeed: {model_id}",
-                extra={
-                    "model": model_name,
-                    "model_id": model_id,
-                    "prompt": prompt[:100],
-                    "image_url": original_image_url[:100],
-                }
-            )
-            
             # STEP 1: Submit task
             response = await self.client.post(
                 f"{self.base_url}/{model_id}",
@@ -120,7 +158,7 @@ class WaveSpeedAIClient(BaseProvider):
                 raise ProviderError("wavespeed", "No task ID in response")
             
             logger.info(
-                f"✅ Task submitted: {task_id}",
+                "✅ TASK SUBMITTED",
                 extra={
                     "model": model_name,
                     "task_id": task_id,
@@ -129,18 +167,22 @@ class WaveSpeedAIClient(BaseProvider):
             )
             
             # STEP 2: Poll for completion
-            image_url = await self._poll_for_result(task_id, model_name)
+            image_url, execution_time = await self._poll_for_result(task_id, model_name)
 
             # STEP 3: Download image
             image_bytes = await self._download_image(image_url)
+            
+            gen_duration = time.time() - gen_start
 
             logger.info(
-                f"🎉 Image generated successfully!",
+                f"✅ WAVESPEED COMPLETE - {model_name}",
                 extra={
                     "model": model_name,
                     "task_id": task_id,
-                    "size_kb": len(image_bytes) / 1024,
-                    "cloudfront_url": image_url,  # ← ADD THIS
+                    "total_time_seconds": round(gen_duration, 2),
+                    "execution_time_ms": execution_time,
+                    "result_size_kb": round(len(image_bytes) / 1024, 2),
+                    "cloudfront_url": image_url,
                 }
             )
 
@@ -172,14 +214,27 @@ class WaveSpeedAIClient(BaseProvider):
         self,
         task_id: str,
         model_name: str,
-        max_wait: int = 300,
+        max_wait: Optional[int] = None,
         poll_interval: int = 2,
-    ) -> str:
-        """Poll for task completion."""
-        import time
+    ) -> tuple[str, int]:
+        """Poll for task completion.
+        
+        Returns:
+            Tuple of (image_url, execution_time_ms)
+        """
+        # ✅ NEW: Use config value if not explicitly provided
+        if max_wait is None:
+            from ..utils.config import get_config
+            config = get_config()
+            max_wait = config.timeout_wavespeed_polling_seconds
+        
         start_time = time.time()
+        poll_count = 0
         
         while time.time() - start_time < max_wait:
+            poll_count += 1
+            elapsed = time.time() - start_time
+            
             try:
                 response = await self.client.get(
                     f"{self.base_url}/predictions/{task_id}/result",
@@ -199,8 +254,13 @@ class WaveSpeedAIClient(BaseProvider):
                 status = data.get("status")
                 
                 logger.info(
-                    f"📊 Task status: {status}",
-                    extra={"model": model_name, "task_id": task_id, "status": status}
+                    f"⏳ POLLING - {status}",
+                    extra={
+                        "task_id": task_id,
+                        "status": status,
+                        "elapsed_seconds": round(elapsed, 1),
+                        "poll_count": poll_count,
+                    }
                 )
                 
                 if status == "completed":
@@ -216,11 +276,12 @@ class WaveSpeedAIClient(BaseProvider):
                         extra={
                             "model": model_name,
                             "task_id": task_id,
-                            "execution_time": execution_time,
+                            "execution_time_ms": execution_time,
+                            "total_poll_time_seconds": round(elapsed, 2),
                         }
                     )
                     
-                    return image_url
+                    return (image_url, execution_time)
                 
                 elif status == "failed":
                     error = data.get("error", "Unknown error")
