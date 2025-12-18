@@ -851,10 +851,14 @@ async def _process_branded_creative(
             "task_id": task_id,
             "downloaded_attachments_count": len(downloaded_attachments),
             "attachment_urls_dict": {k: v[:50] + "..." if v else None for k, v in attachment_urls.items()},
-            "classified_attachments": [
-                {"index": a.index, "role": a.role.value, "intent": a.intent.value, "desc": a.description[:30] if a.description else None}
-                for a in classified.attachments
+            "classified_images": [
+                {"index": img.index, "desc": img.description[:50] if img.description else None}
+                for img in classified.images
             ],
+            "task_type": classified.task_type.value,
+            "dimensions": classified.dimensions,
+            "brief_summary": classified.brief.summary if classified.brief else None,
+            "fonts": classified.fonts,
         }
     )
     
