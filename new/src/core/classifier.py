@@ -1,4 +1,4 @@
-"""Task classifier using Claude vision to analyze briefs and attachments."""
+"""Task classifier - simplified version."""
 
 import json
 import time
@@ -8,35 +8,30 @@ from pathlib import Path
 from ..providers.openrouter import OpenRouterClient
 from ..models.schemas import (
     ClassifiedTask,
-    ClassifiedAttachment,
-    TextElement,
+    ClassifiedImage,
+    ClassifiedBrief,
+    ExtractedLayout,
+    ExtractedStyle,
 )
-from ..models.enums import TaskType, AttachmentIntent
+from ..models.enums import TaskType
 from ..utils.logger import get_logger
-from ..utils.config import get_config, load_fonts_guide
+from ..utils.config import load_fonts_guide
 
 logger = get_logger(__name__)
 
 
 class Classifier:
-    """Classifies tasks and attachments using Claude vision."""
+    """Classifies tasks using Claude vision - simplified."""
     
     def __init__(self, openrouter_client: OpenRouterClient):
-        """
-        Initialize classifier.
-        
-        Args:
-            openrouter_client: OpenRouter API client for Claude calls
-        """
         self.client = openrouter_client
         self.prompt_template = self._load_prompt()
     
     def _load_prompt(self) -> str:
-        """Load classifier prompt from file and inject fonts guide."""
+        """Load classifier prompt and inject fonts guide."""
         prompt_path = Path("config/prompts/classifier_prompt.txt")
         
         if not prompt_path.exists():
-            logger.error(f"Classifier prompt not found: {prompt_path}")
             raise FileNotFoundError(f"Classifier prompt not found: {prompt_path}")
         
         with open(prompt_path, "r", encoding="utf-8") as f:
@@ -53,26 +48,15 @@ class Classifier:
     async def classify(
         self,
         description: str,
-        attachments: List[Tuple[str, bytes]],  # [(filename, png_bytes), ...]
+        attachments: List[Tuple[str, bytes]],
     ) -> ClassifiedTask:
-        """
-        Classify task and attachments.
+        """Classify task and extract information."""
         
-        Args:
-            description: User's brief/request text
-            attachments: List of (filename, image_bytes) tuples
-            
-        Returns:
-            ClassifiedTask with all extracted information
-        """
         logger.info("")
         logger.info("=" * 80)
         logger.info("🧠 CLASSIFIER START")
         logger.info("=" * 80)
         
-        # ============================================
-        # INPUT LOGGING
-        # ============================================
         logger.info(
             "📥 CLASSIFIER INPUT",
             extra={
@@ -91,14 +75,10 @@ class Classifier:
         )
         
         try:
-            # Build message with images
             classify_start = time.time()
             response = await self._call_claude(description, attachments)
             classify_duration = time.time() - classify_start
             
-            # ============================================
-            # RAW RESPONSE LOGGING
-            # ============================================
             logger.info(
                 "📤 CLASSIFIER RAW RESPONSE",
                 extra={
@@ -108,84 +88,34 @@ class Classifier:
                 }
             )
             
-            # Parse response into ClassifiedTask
-            classified = self._parse_response(response, description)
+            classified = self._parse_response(response)
             
-            # ============================================
-            # FINAL RESULT LOGGING
-            # ============================================
             logger.info("")
             logger.info("-" * 60)
             logger.info("🧠 CLASSIFICATION RESULT")
             logger.info("-" * 60)
             
             logger.info(
-                f"📊 TASK TYPE: {classified.task_type.value}",
-                extra={"task_type": classified.task_type.value}
-            )
-            
-            logger.info(
-                f"📐 DIMENSIONS: {classified.dimensions}",
+                "📊 CLASSIFIER COMPLETE",
                 extra={
+                    "task_type": classified.task_type.value,
                     "dimensions": classified.dimensions,
-                    "dimension_count": len(classified.dimensions),
-                }
-            )
-            
-            if classified.text_elements:
-                logger.info(
-                    f"📝 TEXT ELEMENTS: {len(classified.text_elements)}",
-                    extra={
-                        "text_elements": [
-                            {
-                                "role": te.role,
-                                "content": te.content,
-                                "style_hint": te.style_hint,
-                            }
-                            for te in classified.text_elements
-                        ],
-                    }
-                )
-            
-            logger.info(
-                f"🖼️ ATTACHMENTS CLASSIFIED: {len(classified.attachments)}",
-                extra={
-                    "attachments": [
-                        {
-                            "index": a.index,
-                            "intent": a.intent.value,
-                            "role": a.role,
-                            "file_name": a.filename,
-                            "description": a.description,
-                        }
-                        for a in classified.attachments
+                    "brief_summary": classified.brief.summary,
+                    "text_content": classified.brief.text_content,
+                    "style_hints": classified.brief.style_hints,
+                    "fonts": classified.fonts,
+                    "image_count": len(classified.images),
+                    "images": [
+                        {"index": img.index, "description": img.description}
+                        for img in classified.images
                     ],
+                    "has_layout": classified.extracted_layout is not None,
+                    "layout": classified.extracted_layout.positions if classified.extracted_layout else None,
+                    "has_style": classified.extracted_style is not None,
+                    "style_ref": classified.extracted_style.style if classified.extracted_style else None,
+                    "website": classified.website_url,
                 }
             )
-            
-            if classified.website_url:
-                logger.info(
-                    f"🌐 WEBSITE DETECTED: {classified.website_url}",
-                    extra={"website_url": classified.website_url}
-                )
-            
-            if classified.style_hints:
-                logger.info(
-                    "🎨 STYLE HINTS",
-                    extra={"style_hints": classified.style_hints}
-                )
-            
-            if classified.color_scheme:
-                logger.info(
-                    "🎨 COLOR SCHEME",
-                    extra={"color_scheme": classified.color_scheme}
-                )
-            
-            if classified.typography:
-                logger.info(
-                    f"🔤 TYPOGRAPHY: {classified.typography}",
-                    extra={"typography": classified.typography}
-                )
             
             logger.info("")
             logger.info("=" * 80)
@@ -195,13 +125,7 @@ class Classifier:
             return classified
             
         except Exception as e:
-            logger.error(
-                f"Classification failed: {e}",
-                extra={"error": str(e)},
-                exc_info=True
-            )
-            
-            # Fallback: SIMPLE_EDIT with first attachment
+            logger.error(f"Classification failed: {e}", exc_info=True)
             return self._fallback_classification(description, attachments)
     
     async def _call_claude(
@@ -209,58 +133,34 @@ class Classifier:
         description: str,
         attachments: List[Tuple[str, bytes]],
     ) -> str:
-        """
-        Call Claude with vision to classify.
-        
-        Args:
-            description: User's brief
-            attachments: List of (filename, bytes) tuples
-            
-        Returns:
-            Raw JSON response string
-        """
+        """Call Claude with vision."""
         import base64
         
-        # Build user content with text + images
         user_content = [
-            {
-                "type": "text",
-                "text": f"USER REQUEST:\n{description}\n\nIMAGES: {len(attachments)} attached"
-            }
+            {"type": "text", "text": f"USER REQUEST:\n{description}"}
         ]
         
-        # Add each image
         for i, (filename, img_bytes) in enumerate(attachments):
             img_b64 = base64.b64encode(img_bytes).decode('utf-8')
             user_content.append({
                 "type": "text",
-                "text": f"\n--- Image {i + 1}: {filename} ---"
+                "text": f"\n--- Image {i}: {filename} ---"
             })
             user_content.append({
                 "type": "image_url",
-                "image_url": {
-                    "url": f"data:image/png;base64,{img_b64}"
-                }
+                "image_url": {"url": f"data:image/png;base64,{img_b64}"}
             })
         
-        # Build messages
         messages = [
-            {
-                "role": "system",
-                "content": self.prompt_template
-            },
-            {
-                "role": "user",
-                "content": user_content
-            }
+            {"role": "system", "content": self.prompt_template},
+            {"role": "user", "content": user_content}
         ]
         
-        # Call Claude via OpenRouter
         payload = {
-            "model": "anthropic/claude-sonnet-4.5",
+            "model": "anthropic/claude-sonnet-4",
             "messages": messages,
             "max_tokens": 2000,
-            "temperature": 0.0,  # Deterministic for classification
+            "temperature": 0.0,
         }
         
         response = await self.client.client.post(
@@ -269,94 +169,66 @@ class Classifier:
         )
         
         self.client._handle_response_errors(response)
-        
         data = response.json()
-        content = data["choices"][0]["message"]["content"]
         
-        logger.info(
-            "Claude classification response received",
-            extra={"response_length": len(content)}
-        )
-        
-        return content
+        return data["choices"][0]["message"]["content"]
     
-    def _parse_response(
-        self,
-        response: str,
-        original_brief: str,
-    ) -> ClassifiedTask:
-        """
-        Parse Claude's JSON response into ClassifiedTask.
-        
-        Args:
-            response: Raw JSON string from Claude
-            original_brief: Original user request (for fallback)
-            
-        Returns:
-            ClassifiedTask
-        """
+    def _parse_response(self, response: str) -> ClassifiedTask:
+        """Parse Claude's JSON response."""
         import re
         
-        # Strip markdown code blocks if present
+        # Strip markdown
         response = re.sub(r'```json\s*', '', response)
         response = re.sub(r'```\s*$', '', response)
         response = response.strip()
         
-        # Parse JSON
         data = json.loads(response)
-        
-        # Parse attachments
-        attachments = []
-        for att in data.get("attachments", []):
-            attachments.append(ClassifiedAttachment(
-                index=att.get("index", 0),
-                filename=att.get("filename", "unknown"),
-                role=att.get("role", "unknown"),
-                intent=AttachmentIntent(att.get("intent", "include_in_output")),
-                description=att.get("description"),
-                extracted_style=att.get("extracted_style"),
-                extracted_layout=att.get("extracted_layout"),
-            ))
-        
-        # Parse text elements
-        text_elements = []
-        for te in data.get("text_elements", []):
-            if isinstance(te, dict):
-                text_elements.append(TextElement(
-                    content=te.get("content", ""),
-                    role=te.get("role", "text"),
-                    style_hint=te.get("style_hint"),
-                ))
-            elif isinstance(te, str):
-                # Handle flat string format (backward compatibility)
-                text_elements.append(TextElement(
-                    content=te,
-                    role="text",
-                    style_hint=None,
-                ))
         
         # Parse task type
         task_type_str = data.get("task_type", "SIMPLE_EDIT").upper()
-        if task_type_str == "BRANDED_CREATIVE":
-            task_type = TaskType.BRANDED_CREATIVE
-        else:
-            task_type = TaskType.SIMPLE_EDIT
+        task_type = TaskType.BRANDED_CREATIVE if task_type_str == "BRANDED_CREATIVE" else TaskType.SIMPLE_EDIT
         
-        # Build ClassifiedTask
+        # Parse brief
+        brief_data = data.get("brief", {})
+        brief = ClassifiedBrief(
+            summary=brief_data.get("summary", ""),
+            text_content=brief_data.get("text_content", []),
+            style_hints=brief_data.get("style_hints"),
+        )
+        
+        # Parse images
+        images = [
+            ClassifiedImage(index=img["index"], description=img["description"])
+            for img in data.get("images", [])
+        ]
+        
+        # Parse extracted layout
+        extracted_layout = None
+        if data.get("extracted_layout"):
+            layout_data = data["extracted_layout"]
+            extracted_layout = ExtractedLayout(
+                from_index=layout_data.get("from_index", 0),
+                positions=layout_data.get("positions", ""),
+            )
+        
+        # Parse extracted style
+        extracted_style = None
+        if data.get("extracted_style"):
+            style_data = data["extracted_style"]
+            extracted_style = ExtractedStyle(
+                from_index=style_data.get("from_index", 0),
+                style=style_data.get("style", ""),
+            )
+        
         return ClassifiedTask(
             task_type=task_type,
-            attachments=attachments,
-            dimensions=data.get("dimensions", ["1:1"]),
-            text_elements=text_elements,
-            style_hints=data.get("style_hints"),
-            color_scheme=data.get("color_scheme"),
-            typography=data.get("typography"),
-            layout_instructions=data.get("layout_instructions"),
-            background_type=data.get("background_type"),
+            dimensions=data.get("dimensions", []),
+            brief=brief,
+            fonts=data.get("fonts"),
+            images=images,
+            extracted_layout=extracted_layout,
+            extracted_style=extracted_style,
             website_url=data.get("website_url"),
-            brand_aesthetic=None,  # Filled later by BrandAnalyzer
-            original_brief=original_brief,
-            extra=data.get("extra"),
         )
     
     def _fallback_classification(
@@ -364,48 +236,23 @@ class Classifier:
         description: str,
         attachments: List[Tuple[str, bytes]],
     ) -> ClassifiedTask:
-        """
-        Fallback classification when Claude fails.
-        
-        Defaults to SIMPLE_EDIT with first attachment.
-        
-        Args:
-            description: Original brief
-            attachments: List of attachments
-            
-        Returns:
-            Safe fallback ClassifiedTask
-        """
-        logger.warning(
-            "Using fallback classification",
-            extra={"attachment_count": len(attachments)}
-        )
-        
-        # Create basic attachment classification
-        classified_attachments = []
-        for i, (filename, _) in enumerate(attachments):
-            classified_attachments.append(ClassifiedAttachment(
-                index=i,
-                filename=filename,
-                role="graphic" if i == 0 else "unknown",
-                intent=AttachmentIntent.INCLUDE_IN_OUTPUT if i == 0 else AttachmentIntent.REFERENCE_ONLY,
-                description=None,
-                extracted_style=None,
-                extracted_layout=None,
-            ))
+        """Fallback when classification fails."""
+        logger.warning("Using fallback classification")
         
         return ClassifiedTask(
             task_type=TaskType.SIMPLE_EDIT,
-            attachments=classified_attachments,
-            dimensions=["1:1"],
-            text_elements=[],
-            style_hints=None,
-            color_scheme=None,
-            typography=None,
-            layout_instructions=None,
-            background_type=None,
+            dimensions=[],
+            brief=ClassifiedBrief(
+                summary=description,
+                text_content=[],
+                style_hints=None,
+            ),
+            fonts=None,
+            images=[
+                ClassifiedImage(index=i, description=f"Image {i}")
+                for i in range(len(attachments))
+            ],
+            extracted_layout=None,
+            extracted_style=None,
             website_url=None,
-            brand_aesthetic=None,
-            original_brief=description,
-            extra={"fallback": True, "reason": "Classification failed"},
         )

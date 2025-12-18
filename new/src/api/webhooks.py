@@ -15,7 +15,7 @@ from ..utils.image_converter import ImageConverter
 from ..utils.errors import UnsupportedFormatError, ImageConversionError
 from ..core.classifier import Classifier
 from ..core.brand_analyzer import BrandAnalyzer
-from ..models.enums import TaskType, AttachmentIntent
+from ..models.enums import TaskType
 
 logger = get_logger(__name__)
 
@@ -713,26 +713,21 @@ async def process_edit_request(
         
         if classified.task_type == TaskType.SIMPLE_EDIT:
             # ============================================================
-            # SIMPLE_EDIT: Use existing flow (unchanged)
+            # SIMPLE_EDIT: Use first image (simplified)
             # ============================================================
             logger.info("Routing to SIMPLE_EDIT flow", extra={"task_id": task_id})
             
-            # Get first include_in_output attachment
-            main_attachment = None
-            main_url = None
-            main_bytes = None
-            
-            for att in classified.attachments:
-                if att.intent == AttachmentIntent.INCLUDE_IN_OUTPUT:
-                    idx = att.index
-                    main_url = attachment_urls.get(idx)
-                    main_bytes = downloaded_attachments[idx][1] if idx < len(downloaded_attachments) else None
-                    break
+            # ✅ SIMPLIFIED: Just use first attachment
+            main_url = attachment_urls.get(0)
+            main_bytes = downloaded_attachments[0][1] if downloaded_attachments else None
             
             if not main_url or not main_bytes:
-                # Fallback to first attachment
-                main_url = attachment_urls.get(0)
-                main_bytes = downloaded_attachments[0][1]
+                await clickup.update_task_status(
+                    task_id=task_id,
+                    status="blocked",
+                    comment="❌ **No image available**\n\nCould not find image to edit."
+                )
+                return
             
             # Call existing flow
             result = await orchestrator.process_with_iterations(
@@ -1004,57 +999,53 @@ async def _process_branded_creative(
 
 
 def _build_branded_prompt(classified: ClassifiedTask, dimension: str) -> str:
-    """Build rich prompt for first dimension."""
+    """Build prompt for branded creative generation."""
     parts = []
     
     # Dimension
-    parts.append(f"Create a {dimension} marketing graphic.")
+    if dimension:
+        parts.append(f"Create a {dimension} marketing graphic.")
+    else:
+        parts.append("Create a marketing graphic.")
     
-    # Text elements
-    if classified.text_elements:
-        parts.append("\nText content:")
-        for te in classified.text_elements:
-            hint = f" ({te.style_hint})" if te.style_hint else ""
-            parts.append(f"- {te.role}: \"{te.content}\"{hint}")
+    # User's request summary
+    if classified.brief.summary:
+        parts.append(f"\nTask: {classified.brief.summary}")
     
-    # Style
-    if classified.style_hints:
-        aesthetic = classified.style_hints.get("aesthetic")
-        if aesthetic:
-            parts.append(f"\nStyle: {aesthetic}")
+    # Text content
+    if classified.brief.text_content:
+        parts.append("\nText to include:")
+        for text in classified.brief.text_content:
+            parts.append(f"  - \"{text}\"")
     
-    # Typography
-    if classified.typography:
-        parts.append(f"Typography: {classified.typography}")
+    # Style hints
+    if classified.brief.style_hints:
+        parts.append(f"\nStyle: {classified.brief.style_hints}")
     
-    # Colors
-    if classified.color_scheme:
-        colors = ", ".join(f"{k}: {v}" for k, v in classified.color_scheme.items())
-        parts.append(f"Colors: {colors}")
-    
-    # Brand aesthetic
-    if classified.brand_aesthetic:
-        ba = classified.brand_aesthetic
-        if isinstance(ba, dict):
-            prompt_guidance = ba.get("prompt_guidance")
-            if prompt_guidance:
-                parts.append(f"\nBrand guidance: {prompt_guidance}")
+    # Fonts
+    if classified.fonts:
+        parts.append(f"\nTypography: {classified.fonts}")
     
     # Layout from sketch
-    for att in classified.attachments:
-        if att.extracted_layout:
-            parts.append(f"\nLayout (from sketch): {att.extracted_layout}")
+    if classified.extracted_layout:
+        parts.append(f"\nLayout guide: {classified.extracted_layout.positions}")
     
     # Style from inspiration
-    for att in classified.attachments:
-        if att.extracted_style:
-            parts.append(f"\nStyle reference: {att.extracted_style}")
+    if classified.extracted_style:
+        parts.append(f"\nStyle reference: {classified.extracted_style.style}")
     
     # Image descriptions
-    parts.append("\nImages provided:")
-    for att in classified.attachments:
-        if att.intent == AttachmentIntent.INCLUDE_IN_OUTPUT:
-            parts.append(f"- {att.role}: {att.description or att.filename}")
+    if classified.images:
+        parts.append("\nImages provided:")
+        for img in classified.images:
+            parts.append(f"  - Image {img.index}: {img.description}")
+    
+    # Brand aesthetic (from brand_analyzer, if available)
+    if classified.brand_aesthetic:
+        if isinstance(classified.brand_aesthetic, dict):
+            guidance = classified.brand_aesthetic.get("prompt_guidance")
+            if guidance:
+                parts.append(f"\nBrand guidance: {guidance}")
     
     return "\n".join(parts)
 
