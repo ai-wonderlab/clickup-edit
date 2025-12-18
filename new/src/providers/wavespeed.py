@@ -221,11 +221,11 @@ class WaveSpeedAIClient(BaseProvider):
         Returns:
             Tuple of (image_url, execution_time_ms)
         """
-        # ✅ NEW: Use config value if not explicitly provided
+        # ✅ Use config value if not explicitly provided
         if max_wait is None:
             from ..utils.config import get_config
             config = get_config()
-            max_wait = config.timeout_wavespeed_polling_seconds
+            max_wait = int(config.timeout_wavespeed_seconds)  # Use existing timeout_wavespeed_seconds
         
         start_time = time.time()
         poll_count = 0

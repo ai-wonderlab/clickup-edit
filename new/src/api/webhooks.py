@@ -919,7 +919,7 @@ async def _process_branded_creative(
     else:
         await clickup.update_task_status(
             task_id=task_id,
-            status="Needs Human Review",
+            status="blocked",  # Use actual ClickUp status
             comment="❌ **All dimensions failed**\n\nNo successful outputs generated."
         )
 

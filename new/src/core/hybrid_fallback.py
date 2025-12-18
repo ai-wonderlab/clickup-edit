@@ -108,7 +108,7 @@ The AI agent attempted {iterations_attempted} iterations but could not produce a
             # Update task status
             await self.client.update_task_status(
                 task_id=task_id,
-                status="Needs Human Review",
+                status="blocked",  # Use actual ClickUp status
                 comment=comment,
             )
             
