@@ -12,6 +12,7 @@ from ..models.schemas import WebhookPayload, ClickUpTask, ClickUpAttachment, Cla
 from ..utils.logger import get_logger
 from ..utils.config import get_config
 from ..utils.image_converter import ImageConverter
+from ..utils.images import get_closest_aspect_ratio
 from ..utils.errors import UnsupportedFormatError, ImageConversionError
 from ..core.classifier import Classifier
 from ..core.brand_analyzer import BrandAnalyzer
@@ -909,10 +910,35 @@ async def _process_branded_creative(
         )
         return
     
+    # ✅ Derive dimensions from input image if not specified
+    if classified.dimensions:
+        dimensions = classified.dimensions
+    else:
+        # Analyze primary image to get aspect ratio
+        primary_bytes = include_bytes[0] if include_bytes else None
+        if primary_bytes:
+            derived_ratio = get_closest_aspect_ratio(primary_bytes)
+            dimensions = [derived_ratio]
+            logger.info(
+                f"📐 No dimensions specified, derived from image: {derived_ratio}",
+                extra={"task_id": task_id, "derived_dimension": derived_ratio}
+            )
+        else:
+            dimensions = ["1:1"]
+            logger.info(
+                "📐 No dimensions specified, using default: 1:1",
+                extra={"task_id": task_id}
+            )
+    
+    logger.info(
+        f"📐 Dimensions to process: {dimensions}",
+        extra={"task_id": task_id, "dimensions": dimensions, "count": len(dimensions)}
+    )
+    
     # Loop through dimensions
-    for i, dimension in enumerate(classified.dimensions):
+    for i, dimension in enumerate(dimensions):
         logger.info(
-            f"Processing dimension {i + 1}/{len(classified.dimensions)}: {dimension}",
+            f"Processing dimension {i + 1}/{len(dimensions)}: {dimension}",
             extra={"task_id": task_id, "dimension": dimension}
         )
         
@@ -967,7 +993,7 @@ async def _process_branded_creative(
     # Upload results
     if results:
         for i, result in enumerate(results):
-            dimension = classified.dimensions[i]
+            dimension = dimensions[i]  # ✅ USE LOCAL VARIABLE
             dim_label = dimension.replace(":", "x")
             
             await clickup.upload_attachment(
@@ -978,8 +1004,8 @@ async def _process_branded_creative(
         
         # ✅ Checkbox uncheck moved to finally block in process_edit_request
         
-        dims_done = [classified.dimensions[i] for i in range(len(results))]
-        dims_failed = [d for d in classified.dimensions if d not in dims_done]
+        dims_done = [dimensions[i] for i in range(len(results))]  # ✅ USE LOCAL VARIABLE
+        dims_failed = [d for d in dimensions if d not in dims_done]  # ✅ USE LOCAL VARIABLE
         
         status_msg = f"✅ **Creative completed!**\n\n"
         status_msg += f"**Dimensions:** {', '.join(dims_done)}\n"

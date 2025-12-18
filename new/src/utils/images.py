@@ -258,3 +258,53 @@ def resize_for_context(
     except Exception as e:
         logger.warning(f"Failed to resize image for context: {e}, using original")
         return image_bytes
+
+
+def get_closest_aspect_ratio(image_bytes: bytes) -> str:
+    """
+    Analyze image and return the closest standard aspect ratio.
+    
+    Standard ratios for social media:
+    - 1:1 (square) - Instagram feed
+    - 4:5 (Instagram portrait)
+    - 9:16 (Stories/Reels/TikTok)
+    - 16:9 (YouTube/Landscape)
+    
+    Args:
+        image_bytes: Raw image bytes
+        
+    Returns:
+        Closest standard ratio string (e.g., "1:1", "9:16")
+    """
+    STANDARD_RATIOS = {
+        "1:1": 1.0,        # Square
+        "4:5": 0.8,        # Instagram portrait
+        "9:16": 0.5625,    # Stories/Reels (9/16)
+        "16:9": 1.778,     # Landscape (16/9)
+        "4:3": 1.333,      # Classic landscape
+        "3:4": 0.75,       # Classic portrait
+    }
+    
+    try:
+        img = Image.open(BytesIO(image_bytes))
+        width, height = img.size
+        ratio = width / height
+        
+        # Find closest standard ratio
+        closest = min(STANDARD_RATIOS.items(), key=lambda x: abs(x[1] - ratio))
+        
+        logger.debug(
+            f"Image ratio {ratio:.3f} -> closest standard: {closest[0]}",
+            extra={
+                "width": width,
+                "height": height,
+                "actual_ratio": ratio,
+                "closest_ratio": closest[0],
+            }
+        )
+        
+        return closest[0]
+        
+    except Exception as e:
+        logger.warning(f"Failed to detect aspect ratio: {e}, using default 1:1")
+        return "1:1"  # Safe default
