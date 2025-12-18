@@ -572,13 +572,22 @@ async def process_edit_request(
         
         converter = ImageConverter()
         
+        logger.info(
+            "🔍 DEBUG: Starting attachment download phase",
+            extra={
+                "task_id": task_id,
+                "total_attachments": len(attachments_data),
+                "attachment_filenames": [a.get("filename") for a in attachments_data],
+            }
+        )
+        
         for i, att_data in enumerate(attachments_data):
             attachment_url = att_data.get("url")
             filename = att_data.get("filename", f"image_{i}.jpg")
             
             logger.info(
                 f"Downloading attachment {i + 1}/{len(attachments_data)}",
-                extra={"task_id": task_id, "file_name": filename}
+                extra={"task_id": task_id, "file_name": filename, "index": i}
             )
             
             try:
@@ -603,9 +612,26 @@ async def process_edit_request(
                 # Get the uploaded URL
                 task_data = await clickup.get_task(task_id)
                 current_attachments = task_data.get("attachments", [])
+                
                 if current_attachments:
                     # Latest uploaded is last
-                    attachment_urls[i] = current_attachments[-1].get("url")
+                    uploaded_url = current_attachments[-1].get("url")
+                    attachment_urls[i] = uploaded_url
+                    
+                    logger.info(
+                        f"🔍 DEBUG: URL captured for index {i}",
+                        extra={
+                            "task_id": task_id,
+                            "index": i,
+                            "url_preview": uploaded_url[:50] + "..." if uploaded_url else None,
+                            "total_attachments_on_task": len(current_attachments),
+                        }
+                    )
+                else:
+                    logger.error(
+                        f"🔍 DEBUG: NO ATTACHMENTS returned from ClickUp for index {i}",
+                        extra={"task_id": task_id, "index": i}
+                    )
                 
                 logger.info(
                     f"Attachment {i + 1} processed",
@@ -623,6 +649,18 @@ async def process_edit_request(
                 )
                 # Continue with other attachments
                 continue
+        
+        # 🔍 DEBUG: Summary after PHASE 1
+        logger.info(
+            "🔍 DEBUG: PHASE 1 COMPLETE - Attachment summary",
+            extra={
+                "task_id": task_id,
+                "downloaded_count": len(downloaded_attachments),
+                "url_count": len(attachment_urls),
+                "url_indices": list(attachment_urls.keys()),
+                "downloaded_filenames": [f[0] for f in downloaded_attachments],
+            }
+        )
         
         if not downloaded_attachments:
             await clickup.update_task_status(
@@ -811,17 +849,58 @@ async def _process_branded_creative(
     config = get_config()
     results = []
     
-    # Get include_in_output images
+    # 🔍 DEBUG: Log what we received
+    logger.info(
+        "🔍 DEBUG: _process_branded_creative called",
+        extra={
+            "task_id": task_id,
+            "downloaded_attachments_count": len(downloaded_attachments),
+            "attachment_urls_dict": {k: v[:50] + "..." if v else None for k, v in attachment_urls.items()},
+            "classified_attachments": [
+                {"index": a.index, "role": a.role.value, "intent": a.intent.value, "desc": a.description[:30] if a.description else None}
+                for a in classified.attachments
+            ],
+        }
+    )
+    
+    # ✅ SIMPLIFIED: Use ALL images, not filtered by intent
+    # The classifier tells us WHAT the user wants, we include ALL images for generation
     include_urls = []
     include_bytes = []
     
-    for att in classified.attachments:
-        if att.intent == AttachmentIntent.INCLUDE_IN_OUTPUT:
-            idx = att.index
-            if idx in attachment_urls:
-                include_urls.append(attachment_urls[idx])
-            if idx < len(downloaded_attachments):
-                include_bytes.append(downloaded_attachments[idx][1])
+    # Include ALL downloaded attachments (they're already uploaded as PNG)
+    for idx in range(len(downloaded_attachments)):
+        if idx in attachment_urls and attachment_urls[idx]:
+            include_urls.append(attachment_urls[idx])
+            include_bytes.append(downloaded_attachments[idx][1])
+            logger.info(
+                f"🔍 Including image {idx}",
+                extra={
+                    "task_id": task_id,
+                    "index": idx,
+                    "url_preview": attachment_urls[idx][:50] + "..." if attachment_urls[idx] else None,
+                    "bytes_size_kb": len(downloaded_attachments[idx][1]) / 1024,
+                }
+            )
+        else:
+            logger.warning(
+                f"🔍 MISSING URL for index {idx}",
+                extra={
+                    "task_id": task_id,
+                    "index": idx,
+                    "has_bytes": idx < len(downloaded_attachments),
+                    "available_url_indices": list(attachment_urls.keys()),
+                }
+            )
+    
+    logger.info(
+        "🔍 DEBUG: Final image collection",
+        extra={
+            "task_id": task_id,
+            "include_urls_count": len(include_urls),
+            "include_bytes_count": len(include_bytes),
+        }
+    )
     
     if not include_urls:
         await clickup.update_task_status(
