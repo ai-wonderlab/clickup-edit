@@ -265,10 +265,11 @@ def get_closest_aspect_ratio(image_bytes: bytes) -> str:
     Analyze image and return the closest standard aspect ratio.
     
     Standard ratios for social media:
-    - 1:1 (square) - Instagram feed
-    - 4:5 (Instagram portrait)
-    - 9:16 (Stories/Reels/TikTok)
-    - 16:9 (YouTube/Landscape)
+    - 1:1 (square) - Instagram/Facebook feed
+    - 4:5 (Instagram portrait - RECOMMENDED)
+    - 9:16 (Stories/Reels/TikTok/Shorts)
+    - 16:9 (YouTube/LinkedIn landscape)
+    - 2:3 (Pinterest)
     
     Args:
         image_bytes: Raw image bytes
@@ -277,12 +278,14 @@ def get_closest_aspect_ratio(image_bytes: bytes) -> str:
         Closest standard ratio string (e.g., "1:1", "9:16")
     """
     STANDARD_RATIOS = {
-        "1:1": 1.0,        # Square
-        "4:5": 0.8,        # Instagram portrait
-        "9:16": 0.5625,    # Stories/Reels (9/16)
-        "16:9": 1.778,     # Landscape (16/9)
+        "1:1": 1.0,        # Instagram/Facebook feed
+        "4:5": 0.8,        # Instagram portrait (RECOMMENDED)
+        "9:16": 0.5625,    # Stories/Reels/TikTok/Shorts
+        "16:9": 1.778,     # YouTube/LinkedIn landscape
         "4:3": 1.333,      # Classic landscape
         "3:4": 0.75,       # Classic portrait
+        "2:3": 0.667,      # Pinterest
+        "21:9": 2.333,     # Cinematic/Ultra-wide
     }
     
     try:
