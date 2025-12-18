@@ -401,6 +401,15 @@ async def clickup_webhook(
             )
             return {"status": "ignored", "reason": "Task already complete"}
         
+        # ✅ Only process tasks in "to do" status
+        if task_status not in ["to do", "todo"]:
+            await release_task_lock(task_id)
+            logger.info(
+                f"Task not in 'to do' status, skipping",
+                extra={"task_id": task_id, "status": task_status}
+            )
+            return {"status": "ignored", "reason": f"Task status is '{task_status}', not 'to do'"}
+        
         description = task_data.get("description", "") or task_data.get("text_content", "")
         attachments = task_data.get("attachments", [])
         
@@ -543,6 +552,10 @@ async def process_edit_request(
     V2.0: Supports multiple attachments and task classification.
     """
     try:
+        # ✅ FIRST THING: Change status to "in progress"
+        await clickup.update_task_status(task_id, "in progress")
+        logger.info("Status set to 'in progress'", extra={"task_id": task_id})
+        
         logger.info(
             f"Background processing started for task {task_id}",
             extra={
@@ -733,6 +746,18 @@ async def process_edit_request(
             logger.error(f"Failed to notify ClickUp: {notify_error}")
     
     finally:
+        # ✅ ALWAYS uncheck checkbox (prevents re-trigger)
+        try:
+            config = get_config()
+            await clickup.update_custom_field(
+                task_id=task_id,
+                field_id=config.clickup_custom_field_id_ai_edit,
+                value=False,
+            )
+            logger.info("Checkbox unchecked", extra={"task_id": task_id})
+        except Exception as e:
+            logger.error(f"Failed to uncheck checkbox: {e}")
+        
         await release_task_lock(task_id)
         logger.info("Background processing complete", extra={"task_id": task_id})
 
@@ -748,11 +773,7 @@ async def _handle_simple_edit_result(result, task_id: str, clickup):
             filename=f"edited_{task_id}.png",
         )
         
-        await clickup.update_custom_field(
-            task_id=task_id,
-            field_id=config.clickup_custom_field_id_ai_edit,
-            value=False,
-        )
+        # ✅ Checkbox uncheck moved to finally block in process_edit_request
         
         comment = (
             f"✅ **Edit completed!**\n\n"
@@ -877,11 +898,7 @@ async def _process_branded_creative(
                 filename=f"edited_{task_id}_{dim_label}.png",
             )
         
-        await clickup.update_custom_field(
-            task_id=task_id,
-            field_id=config.clickup_custom_field_id_ai_edit,
-            value=False,
-        )
+        # ✅ Checkbox uncheck moved to finally block in process_edit_request
         
         dims_done = [classified.dimensions[i] for i in range(len(results))]
         dims_failed = [d for d in classified.dimensions if d not in dims_done]
