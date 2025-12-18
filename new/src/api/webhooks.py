@@ -910,18 +910,37 @@ async def _process_branded_creative(
         )
         return
     
-    # ✅ Derive dimensions from input image if not specified
+    # ✅ Derive dimensions from PRIMARY input image if not specified
     if classified.dimensions:
         dimensions = classified.dimensions
+        logger.info(
+            f"📐 Using specified dimensions: {dimensions}",
+            extra={"task_id": task_id, "dimensions": dimensions}
+        )
     else:
-        # Analyze primary image to get aspect ratio
-        primary_bytes = include_bytes[0] if include_bytes else None
+        # Use PRIMARY image (identified by classifier) for dimensions
+        primary_index = classified.primary_image_index
+        
+        # Validate index is within bounds
+        if primary_index >= len(include_bytes):
+            primary_index = 0
+            logger.warning(
+                f"📐 Primary index {classified.primary_image_index} out of bounds, using 0",
+                extra={"task_id": task_id}
+            )
+        
+        primary_bytes = include_bytes[primary_index] if include_bytes else None
+        
         if primary_bytes:
             derived_ratio = get_closest_aspect_ratio(primary_bytes)
             dimensions = [derived_ratio]
             logger.info(
-                f"📐 No dimensions specified, derived from image: {derived_ratio}",
-                extra={"task_id": task_id, "derived_dimension": derived_ratio}
+                f"📐 No dimensions specified, derived from primary image (index {primary_index}): {derived_ratio}",
+                extra={
+                    "task_id": task_id,
+                    "primary_index": primary_index,
+                    "derived_dimension": derived_ratio,
+                }
             )
         else:
             dimensions = ["1:1"]

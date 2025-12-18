@@ -226,6 +226,7 @@ class Classifier:
             brief=brief,
             fonts=data.get("fonts"),
             images=images,
+            primary_image_index=data.get("primary_image_index", 0),
             extracted_layout=extracted_layout,
             extracted_style=extracted_style,
             website_url=data.get("website_url"),
@@ -252,6 +253,7 @@ class Classifier:
                 ClassifiedImage(index=i, description=f"Image {i}")
                 for i in range(len(attachments))
             ],
+            primary_image_index=0,
             extracted_layout=None,
             extracted_style=None,
             website_url=None,

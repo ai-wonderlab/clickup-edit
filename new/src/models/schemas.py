@@ -130,6 +130,7 @@ class ClassifiedTask(BaseModel):
     brief: ClassifiedBrief
     fonts: Optional[str] = None
     images: List[ClassifiedImage] = Field(default_factory=list)
+    primary_image_index: int = 0  # Which image defines output dimensions
     extracted_layout: Optional[ExtractedLayout] = None
     extracted_style: Optional[ExtractedStyle] = None
     website_url: Optional[str] = None
