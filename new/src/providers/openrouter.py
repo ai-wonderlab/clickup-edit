@@ -386,35 +386,53 @@ Return ONLY JSON."""
                 original_data_url = f"data:image/png;base64,{original_b64}"
                 
                 # Edited image: download from URL
-                # ✅ NEW CODE (WORKS):
-                # Edited image: download from URL and FORCE convert to PNG
                 logger.info("📥 Downloading edited image for validation")
                 async with httpx.AsyncClient(timeout=30.0) as download_client:
                     edited_response = await download_client.get(image_url)
                     edited_response.raise_for_status()
                     edited_bytes = edited_response.content
 
-                # ✅ SMART FORMAT HANDLING: Keep JPEG as JPEG, convert others to PNG
-                from PIL import Image
-                import io
-
-                edited_img = Image.open(io.BytesIO(edited_bytes))
-                image_format = edited_img.format  # JPEG, PNG, etc.
+                # ✅ FIX: Resize/compress for Claude's 5MB limit
+                MAX_SIZE_FOR_CLAUDE = 3.5 * 1024 * 1024  # 3.5MB raw → ~4.7MB base64 (under 5MB)
                 
-                if image_format == 'JPEG':
-                    # Keep JPEG as-is (much smaller for validation)
-                    logger.info(f"✅ Keeping JPEG format for validation ({len(edited_bytes)/1024:.1f}KB)")
+                if len(edited_bytes) > MAX_SIZE_FOR_CLAUDE:
+                    logger.warning(
+                        f"Image too large for validation ({len(edited_bytes)/1024/1024:.1f}MB), resizing"
+                    )
+                    
+                    # Use existing utility - converts to JPEG and resizes
+                    edited_bytes = resize_for_context(
+                        edited_bytes,
+                        max_dimension=2048,  # Good enough for validation
+                        quality=85           # Higher than default 70
+                    )
+                    
+                    logger.info(f"Resized for validation: {len(edited_bytes)/1024:.1f}KB")
                     edited_b64 = base64.b64encode(edited_bytes).decode('utf-8')
                     edited_data_url = f"data:image/jpeg;base64,{edited_b64}"
                 else:
-                    # Convert to PNG for other formats
-                    logger.info(f"🔄 Converting {image_format} to PNG format")
-                    edited_png_buffer = io.BytesIO()
-                    edited_img.save(edited_png_buffer, format='PNG')
-                    edited_png_bytes = edited_png_buffer.getvalue()
-                    edited_b64 = base64.b64encode(edited_png_bytes).decode('utf-8')
-                    edited_data_url = f"data:image/png;base64,{edited_b64}"
-                    logger.info(f"✅ Image converted: {len(edited_bytes)/1024:.1f}KB → {len(edited_png_bytes)/1024:.1f}KB PNG")
+                    # Small enough - use as-is but detect format
+                    from PIL import Image
+                    import io
+
+                    edited_img = Image.open(io.BytesIO(edited_bytes))
+                    image_format = edited_img.format  # JPEG, PNG, etc.
+                    
+                    if image_format == 'JPEG':
+                        logger.info(f"✅ Keeping JPEG format for validation ({len(edited_bytes)/1024:.1f}KB)")
+                        edited_b64 = base64.b64encode(edited_bytes).decode('utf-8')
+                        edited_data_url = f"data:image/jpeg;base64,{edited_b64}"
+                    else:
+                        # Convert non-JPEG to JPEG for smaller size
+                        logger.info(f"🔄 Converting {image_format} to JPEG format")
+                        jpeg_buffer = io.BytesIO()
+                        if edited_img.mode in ('RGBA', 'LA', 'P'):
+                            edited_img = edited_img.convert('RGB')
+                        edited_img.save(jpeg_buffer, format='JPEG', quality=90)
+                        edited_jpeg_bytes = jpeg_buffer.getvalue()
+                        edited_b64 = base64.b64encode(edited_jpeg_bytes).decode('utf-8')
+                        edited_data_url = f"data:image/jpeg;base64,{edited_b64}"
+                        logger.info(f"✅ Converted: {len(edited_bytes)/1024:.1f}KB → {len(edited_jpeg_bytes)/1024:.1f}KB JPEG")
                 
                 logger.info("✅ Both images prepared for validation")
                 
