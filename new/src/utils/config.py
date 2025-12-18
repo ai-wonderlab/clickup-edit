@@ -85,6 +85,9 @@ class Config(BaseModel):
     timeout_openrouter_seconds: float = Field(default=120.0, alias="TIMEOUT_OPENROUTER_SECONDS")
     timeout_wavespeed_seconds: float = Field(default=300.0, alias="TIMEOUT_WAVESPEED_SECONDS")
     
+    # Validation Settings
+    validation_delay_seconds: float = Field(default=2.0, alias="VALIDATION_DELAY_SECONDS")
+    
     # Model Configuration
     image_models: list[ModelConfig] = []
     enhancement: Optional[EnhancementConfig] = None
