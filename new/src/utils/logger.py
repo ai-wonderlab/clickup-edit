@@ -11,6 +11,15 @@ from typing import Any, Dict
 class JSONFormatter(logging.Formatter):
     """Format logs as JSON for structured logging."""
     
+    # Fields that Python's logging adds automatically (exclude these)
+    BUILTIN_ATTRS = {
+        'name', 'msg', 'args', 'created', 'filename', 'funcName',
+        'levelname', 'levelno', 'lineno', 'module', 'msecs',
+        'pathname', 'process', 'processName', 'relativeCreated',
+        'stack_info', 'exc_info', 'exc_text', 'thread', 'threadName',
+        'taskName', 'message',
+    }
+    
     def format(self, record: logging.LogRecord) -> str:
         log_data: Dict[str, Any] = {
             "timestamp": datetime.utcnow().isoformat() + "Z",
@@ -19,17 +28,16 @@ class JSONFormatter(logging.Formatter):
             "message": record.getMessage(),
         }
         
-        # Add extra fields if present
-        if hasattr(record, "task_id"):
-            log_data["task_id"] = record.task_id
-        if hasattr(record, "iteration"):
-            log_data["iteration"] = record.iteration
-        if hasattr(record, "model"):
-            log_data["model"] = record.model
-        if hasattr(record, "latency_ms"):
-            log_data["latency_ms"] = record.latency_ms
-        if hasattr(record, "status"):
-            log_data["status"] = record.status
+        # ✅ Extract ALL extra fields dynamically
+        for key, value in record.__dict__.items():
+            if key not in self.BUILTIN_ATTRS and not key.startswith('_'):
+                try:
+                    # Ensure JSON serializable
+                    json.dumps(value)
+                    log_data[key] = value
+                except (TypeError, ValueError):
+                    # If not serializable, convert to string
+                    log_data[key] = str(value)
         
         # Add exception info if present
         if record.exc_info:
