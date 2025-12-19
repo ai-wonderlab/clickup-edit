@@ -863,42 +863,81 @@ async def _process_branded_creative(
         }
     )
     
-    # ✅ SIMPLIFIED: Use ALL images, not filtered by intent
-    # The classifier tells us WHAT the user wants, we include ALL images for generation
+    # ================================================================
+    # SEPARATE: Include vs Reference-only images
+    # ================================================================
+    reference_indices = set()
+    
+    # Sketch is reference only (used for layout guidance, not generation)
+    if classified.extracted_layout:
+        reference_indices.add(classified.extracted_layout.from_index)
+        logger.info(
+            f"🎨 Image {classified.extracted_layout.from_index} is SKETCH (reference only)",
+            extra={
+                "task_id": task_id,
+                "index": classified.extracted_layout.from_index,
+                "purpose": "layout_reference",
+            }
+        )
+    
+    # Inspiration is reference only (used for style guidance, not generation)
+    if classified.extracted_style:
+        reference_indices.add(classified.extracted_style.from_index)
+        logger.info(
+            f"🎨 Image {classified.extracted_style.from_index} is INSPIRATION (reference only)",
+            extra={
+                "task_id": task_id,
+                "index": classified.extracted_style.from_index,
+                "purpose": "style_reference",
+            }
+        )
+    
+    logger.info(
+        f"🔍 Reference indices to exclude from generation: {reference_indices}",
+        extra={"task_id": task_id, "reference_indices": list(reference_indices)}
+    )
+    
+    # Split images into:
+    # - include_*: Go to WaveSpeed for generation
+    # - all_bytes: Go to Claude for enhancement context (ALL images)
     include_urls = []
     include_bytes = []
+    all_bytes = []  # ALL images for Claude context
     
-    # Include ALL downloaded attachments (they're already uploaded as PNG)
     for idx in range(len(downloaded_attachments)):
-        if idx in attachment_urls and attachment_urls[idx]:
-            include_urls.append(attachment_urls[idx])
-            include_bytes.append(downloaded_attachments[idx][1])
-            logger.info(
-                f"🔍 Including image {idx}",
-                extra={
-                    "task_id": task_id,
-                    "index": idx,
-                    "url_preview": attachment_urls[idx][:50] + "..." if attachment_urls[idx] else None,
-                    "bytes_size_kb": len(downloaded_attachments[idx][1]) / 1024,
-                }
-            )
+        filename, bytes_data = downloaded_attachments[idx]
+        
+        # ALL images go to Claude for context
+        all_bytes.append(bytes_data)
+        
+        # Only NON-reference images go to WaveSpeed
+        if idx not in reference_indices:
+            if idx in attachment_urls and attachment_urls[idx]:
+                include_urls.append(attachment_urls[idx])
+                include_bytes.append(bytes_data)
+                logger.info(
+                    f"✅ Image {idx} ({filename}) → INCLUDE in generation",
+                    extra={"task_id": task_id, "index": idx, "filename": filename}
+                )
+            else:
+                logger.warning(
+                    f"⚠️ Image {idx} has no URL, skipping",
+                    extra={"task_id": task_id, "index": idx}
+                )
         else:
-            logger.warning(
-                f"🔍 MISSING URL for index {idx}",
-                extra={
-                    "task_id": task_id,
-                    "index": idx,
-                    "has_bytes": idx < len(downloaded_attachments),
-                    "available_url_indices": list(attachment_urls.keys()),
-                }
+            logger.info(
+                f"📌 Image {idx} ({filename}) → REFERENCE only (Claude context, not WaveSpeed)",
+                extra={"task_id": task_id, "index": idx, "filename": filename}
             )
     
     logger.info(
-        "🔍 DEBUG: Final image collection",
+        "🔍 DEBUG: Image split complete",
         extra={
             "task_id": task_id,
-            "include_urls_count": len(include_urls),
-            "include_bytes_count": len(include_bytes),
+            "total_images": len(downloaded_attachments),
+            "include_count": len(include_urls),
+            "reference_count": len(reference_indices),
+            "all_for_context": len(all_bytes),
         }
     )
     
@@ -964,29 +1003,32 @@ async def _process_branded_creative(
         try:
             if i == 0:
                 # First dimension: use original attachments
-                # Build rich prompt with all context
                 prompt = _build_branded_prompt(classified, dimension)
-                image_url = include_urls[0]  # Primary image
+                image_url = include_urls[0]  # Primary image for generation
                 image_bytes = include_bytes[0]
-                additional_urls = include_urls[1:] if len(include_urls) > 1 else None  # ✅ Additional image URLs
-                additional_bytes = include_bytes[1:] if len(include_bytes) > 1 else None  # ✅ Additional image bytes
+                additional_urls = include_urls[1:] if len(include_urls) > 1 else None
+                additional_bytes = include_bytes[1:] if len(include_bytes) > 1 else None
+                # ✅ NEW: ALL images for Claude enhancement context (includes reference)
+                context_bytes = all_bytes
             else:
                 # Subsequent dimensions: adapt from previous result
                 prompt = _build_adapt_prompt(classified, dimension)
                 image_url = results[-1].final_image.temp_url
                 image_bytes = results[-1].final_image.image_bytes
-                additional_urls = None  # No additional images for adaptations
+                additional_urls = None
                 additional_bytes = None
+                context_bytes = None  # No extra context for adaptations
             
-            # Use existing orchestrator flow
+            # Use orchestrator with separate context
             result = await orchestrator.process_with_iterations(
                 task_id=task_id,
                 prompt=prompt,
                 original_image_url=image_url,
                 original_image_bytes=image_bytes,
                 task_type="BRANDED_CREATIVE",
-                additional_image_urls=additional_urls,  # ✅ Pass additional image URLs
-                additional_image_bytes=additional_bytes,  # ✅ Pass additional image bytes
+                additional_image_urls=additional_urls,      # → WaveSpeed only
+                additional_image_bytes=additional_bytes,    # → WaveSpeed only
+                context_image_bytes=context_bytes,          # ✅ NEW: → Claude only
             )
             
             if result.status == "success":

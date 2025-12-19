@@ -126,10 +126,11 @@ class Orchestrator:
         task_id: str,
         prompt: str,
         original_image_url: str,
-        original_image_bytes: bytes,  # ✅ Receive PNG bytes
-        task_type: str = "SIMPLE_EDIT",  # ✅ NEW: Task type for validation criteria
-        additional_image_urls: List[str] = None,  # ✅ NEW: Additional images for multi-image generation
-        additional_image_bytes: List[bytes] = None,  # ✅ NEW: Additional image bytes for context
+        original_image_bytes: bytes,
+        task_type: str = "SIMPLE_EDIT",
+        additional_image_urls: List[str] = None,      # → WaveSpeed generation
+        additional_image_bytes: List[bytes] = None,   # → WaveSpeed generation
+        context_image_bytes: List[bytes] = None,      # ✅ NEW: → Claude enhancement only
     ) -> ProcessResult:
         """
         Process edit request with iterative refinement.
@@ -138,7 +139,11 @@ class Orchestrator:
             task_id: ClickUp task ID
             prompt: User's edit request
             original_image_url: URL of original image
+            original_image_bytes: Original image bytes
             task_type: Task type for validation (SIMPLE_EDIT or BRANDED_CREATIVE)
+            additional_image_urls: Extra images for WaveSpeed generation
+            additional_image_bytes: Extra image bytes for WaveSpeed generation
+            context_image_bytes: ALL images for Claude enhancement context (includes reference/inspiration)
             
         Returns:
             ProcessResult with final outcome
@@ -150,17 +155,24 @@ class Orchestrator:
             extra={
                 "task_id": task_id,
                 "max_iterations": self.max_iterations,
+                "has_context_images": context_image_bytes is not None,
+                "context_count": len(context_image_bytes) if context_image_bytes else 0,
             }
         )
         
-        # Build combined image lists for multi-image support
-        all_image_urls = [original_image_url]
+        # Build image lists for GENERATION (WaveSpeed)
+        generation_urls = [original_image_url]
         if additional_image_urls:
-            all_image_urls.extend(additional_image_urls)
+            generation_urls.extend(additional_image_urls)
         
-        all_image_bytes = [original_image_bytes]
+        generation_bytes = [original_image_bytes]
         if additional_image_bytes:
-            all_image_bytes.extend(additional_image_bytes)
+            generation_bytes.extend(additional_image_bytes)
+        
+        # Build image list for ENHANCEMENT (Claude) - includes ALL context
+        # If context_image_bytes provided, use that (includes inspiration/sketch)
+        # Otherwise fall back to generation_bytes
+        enhancement_bytes = context_image_bytes if context_image_bytes else generation_bytes
         
         current_prompt = prompt
         all_iterations: List[IterationMetrics] = []
@@ -178,28 +190,31 @@ class Orchestrator:
             )
             
             try:
-                # Phase 1: Parallel Enhancement
+                # Phase 1: Parallel Enhancement - uses ALL images (including reference)
                 logger.info("Phase 1: Enhancement", extra={"iteration": iteration})
                 include_image = (iteration == 1)
 
-                # 🎯 ENHANCEMENT PHASE
                 enhanced = await self.enhancer.enhance_all_parallel(
                     current_prompt,
-                    original_images_bytes=all_image_bytes if include_image else None,
+                    original_images_bytes=enhancement_bytes if include_image else None,  # ✅ ALL images
                 )
                 
                 if include_image:
                     logger.info(
-                        "🖼️ Sent original image(s) to Claude for context-aware enhancement",
-                        extra={"iteration": iteration, "num_images": len(all_image_bytes)}
+                        "🖼️ Sent ALL images to Claude for context-aware enhancement",
+                        extra={
+                            "iteration": iteration,
+                            "num_images": len(enhancement_bytes),
+                            "includes_reference": context_image_bytes is not None,
+                        }
                     )
                 
-                # Phase 2: Parallel Generation
+                # Phase 2: Parallel Generation - uses ONLY include images (no reference)
                 logger.info("Phase 2: Generation", extra={"iteration": iteration})
                 
                 generated = await self.generator.generate_all_parallel(
                     enhanced,
-                    all_image_urls  # ← Pass list of all images
+                    generation_urls  # ✅ Only images to include in output
                 )
                 
                 # Phase 3: Parallel Validation
@@ -209,7 +224,7 @@ class Orchestrator:
                     validated = await self.validator.validate_all_parallel(
                         generated,
                         current_prompt,
-                        all_image_bytes,  # ✅ Pass all original image bytes
+                        generation_bytes,  # ✅ Only input images (no reference)
                         task_type,  # ✅ Pass task type for validation criteria
                     )
                     
