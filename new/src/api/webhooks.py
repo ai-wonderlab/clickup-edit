@@ -603,35 +603,33 @@ async def process_edit_request(
                 
                 downloaded_attachments.append((png_filename, png_bytes))
                 
-                # Upload PNG to ClickUp to get URL for WaveSpeed
-                await clickup.upload_attachment(
+                # Upload PNG to ClickUp and get URL directly from response
+                upload_result = await clickup.upload_attachment(
                     task_id=task_id,
                     image_bytes=png_bytes,
                     filename=png_filename
                 )
                 
-                # Get the uploaded URL
-                task_data = await clickup.get_task(task_id)
-                current_attachments = task_data.get("attachments", [])
-                
-                if current_attachments:
-                    # Latest uploaded is last
-                    uploaded_url = current_attachments[-1].get("url")
+                # Use URL directly from upload response (no race condition!)
+                uploaded_url = upload_result.get("url")
+                if uploaded_url:
                     attachment_urls[i] = uploaded_url
-                    
                     logger.info(
-                        f"🔍 DEBUG: URL captured for index {i}",
+                        f"🔍 DEBUG: URL captured directly from upload response for index {i}",
                         extra={
                             "task_id": task_id,
                             "index": i,
                             "url_preview": uploaded_url[:50] + "..." if uploaded_url else None,
-                            "total_attachments_on_task": len(current_attachments),
                         }
                     )
                 else:
                     logger.error(
-                        f"🔍 DEBUG: NO ATTACHMENTS returned from ClickUp for index {i}",
-                        extra={"task_id": task_id, "index": i}
+                        f"🔍 DEBUG: Upload response missing URL for index {i}",
+                        extra={
+                            "task_id": task_id,
+                            "index": i,
+                            "upload_result": upload_result,
+                        }
                     )
                 
                 logger.info(

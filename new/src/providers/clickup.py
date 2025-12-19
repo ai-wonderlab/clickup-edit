@@ -82,7 +82,7 @@ class ClickUpClient(BaseProvider):
         task_id: str,
         image_bytes: bytes,
         filename: str,
-    ) -> str:
+    ) -> dict:
         """
         Upload an attachment to a ClickUp task.
         
@@ -92,7 +92,7 @@ class ClickUpClient(BaseProvider):
             filename: Filename for the attachment
             
         Returns:
-            Attachment ID
+            Dict with attachment id and url: {"id": ..., "url": ...}
             
         Raises:
             ProviderError: If upload fails
@@ -144,6 +144,7 @@ class ClickUpClient(BaseProvider):
             try:
                 data = response.json()
                 attachment_id = data.get("id")
+                attachment_url = data.get("url")
             except Exception as e:
                 # If not JSON, check if upload was successful anyway
                 logger.warning(
@@ -152,16 +153,21 @@ class ClickUpClient(BaseProvider):
                 )
                 # Consider it successful if we got 200
                 attachment_id = "uploaded"
+                attachment_url = None
             
             logger.info(
                 "Attachment uploaded",
                 extra={
                     "task_id": task_id,
                     "attachment_id": attachment_id,
+                    "url_captured": attachment_url is not None,
                 }
             )
             
-            return attachment_id
+            return {
+                "id": attachment_id,
+                "url": attachment_url,
+            }
             
         except httpx.HTTPStatusError as e:
             self._handle_response_errors(e.response)
