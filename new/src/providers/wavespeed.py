@@ -103,15 +103,15 @@ class WaveSpeedAIClient(BaseProvider):
                 "model": model_name,
                 "model_id": model_id,
                 "prompt_length": len(prompt),
-                "prompt_full": prompt,
+                "prompt_preview": prompt[:200] + "..." if len(prompt) > 200 else prompt,
                 "image_count": len(image_urls),
-                "image_urls": image_urls,
+                "image_urls": [u[:80] + "..." if len(u) > 80 else u for u in image_urls],
             }
         )
         
         logger.info(
             "📦 WAVESPEED PAYLOAD",
-            extra={"payload": payload}
+            extra={"payload_keys": list(payload.keys()), "prompt_len": len(payload.get('prompt', ''))}
         )
         
         gen_start = time.time()

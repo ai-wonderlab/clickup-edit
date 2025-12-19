@@ -54,9 +54,9 @@ class ImageGenerator:
             extra={
                 "model": model_name,
                 "prompt_length": len(enhanced_prompt.enhanced),
-                "prompt_full": enhanced_prompt.enhanced,
+                "prompt_preview": enhanced_prompt.enhanced[:200] + "..." if len(enhanced_prompt.enhanced) > 200 else enhanced_prompt.enhanced,
                 "image_url_count": len(image_urls),
-                "image_urls": [url[:80] for url in image_urls],
+                "image_urls": [url[:80] + "..." if len(url) > 80 else url for url in image_urls],
             }
         )
         

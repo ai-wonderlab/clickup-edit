@@ -694,7 +694,7 @@ async def process_edit_request(
         if classified.website_url:
             logger.info(
                 "Starting brand analysis",
-                extra={"task_id": task_id, "website": classified.website_url}
+                extra={"task_id": task_id, "website": classified.website_url[:80] + "..." if len(classified.website_url) > 80 else classified.website_url}
             )
             
             brand_result = await brand_analyzer.analyze(classified.website_url)
