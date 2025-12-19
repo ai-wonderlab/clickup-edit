@@ -266,9 +266,7 @@ class Refiner:
                     
                     enhanced = await self.enhancer.enhance_all_parallel(
                         original_prompt=current_step_prompt,
-                        original_image_url=current_image_url,
-                        original_image_bytes=current_image_bytes,
-                        include_image=True
+                        original_images_bytes=[current_image_bytes],  # ✅ Fixed: wrap in list
                     )
                     
                     logger.info(
