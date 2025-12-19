@@ -917,7 +917,7 @@ async def _process_branded_creative(
                 include_bytes.append(bytes_data)
                 logger.info(
                     f"✅ Image {idx} ({filename}) → INCLUDE in generation",
-                    extra={"task_id": task_id, "index": idx, "filename": filename}
+                    extra={"task_id": task_id, "index": idx, "file_name": filename}
                 )
             else:
                 logger.warning(
@@ -927,7 +927,7 @@ async def _process_branded_creative(
         else:
             logger.info(
                 f"📌 Image {idx} ({filename}) → REFERENCE only (Claude context, not WaveSpeed)",
-                extra={"task_id": task_id, "index": idx, "filename": filename}
+                extra={"task_id": task_id, "index": idx, "file_name": filename}
             )
     
     logger.info(
