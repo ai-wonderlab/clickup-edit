@@ -117,7 +117,10 @@ class Refiner:
         )
         
         # Re-run full pipeline with CLEAN prompt (no feedback contamination)
-        enhanced = await self.enhancer.enhance_all_parallel(refined_prompt)
+        enhanced = await self.enhancer.enhance_all_parallel(
+            refined_prompt,
+            [original_image_bytes]  # Pass image for context
+        )
         
         generated = await self.generator.generate_all_parallel(
             enhanced,
