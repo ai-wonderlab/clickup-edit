@@ -402,7 +402,11 @@ async def clickup_webhook(
             
             task_data = await clickup.get_task(task_id)
             
-            # 🛡️ CHECK IF ALREADY COMPLETE
+            # � TEMPORARY DEBUG: See raw ClickUp data
+            logger.info(f"📝 RAW DESCRIPTION: {task_data.get('description', 'NO DESCRIPTION')}")
+            logger.info(f"📝 RAW DESCRIPTION REPR: {repr(task_data.get('description', ''))}")
+            
+            # �🛡️ CHECK IF ALREADY COMPLETE
             task_status = task_data.get("status", {}).get("status", "").lower()
             if task_status == "complete":
                 logger.info(
