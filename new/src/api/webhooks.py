@@ -4,6 +4,7 @@ import hmac
 import hashlib
 import asyncio
 import time
+import uuid
 from typing import Dict, Any, Tuple, Optional, List
 from fastapi import APIRouter, Request, HTTPException, Depends
 from pydantic import BaseModel
@@ -176,7 +177,7 @@ async def acquire_task_lock(task_id: str) -> bool:
         await _task_locks[task_id][0].acquire()
         
         logger.info(
-            "Task lock acquired",
+            "🔐 LOCK ACQUIRED",
             extra={
                 "task_id": task_id,
                 "total_active_locks": len(_task_locks),
@@ -214,7 +215,7 @@ async def release_task_lock(task_id: str):
                 age_seconds = time.time() - timestamp
                 
                 logger.info(
-                    "Task lock released",
+                    "🔓 LOCK RELEASED",
                     extra={
                         "task_id": task_id,
                         "lock_duration_seconds": age_seconds,
@@ -382,107 +383,110 @@ async def clickup_webhook(
                 "message": "Task is already being processed"
             }
         
-        # Lock acquired - proceed with validation
         # ====================================================================
-        
-        # Fetch full task data from ClickUp API
-        logger.info(
-            "Fetching full task data from ClickUp",
-            extra={"task_id": task_id}
-        )
-        
-        task_data = await clickup.get_task(task_id)
-        # 🛡️ CHECK IF ALREADY COMPLETE
-        task_status = task_data.get("status", {}).get("status", "").lower()
-        if task_status == "complete":
-            await release_task_lock(task_id)
-            logger.info(
-                "Task already complete, skipping",
-                extra={"task_id": task_id, "status": task_status}
-            )
-            return {"status": "ignored", "reason": "Task already complete"}
-        
-        # ✅ Only process tasks in "to do" status
-        if task_status not in ["to do", "todo"]:
-            await release_task_lock(task_id)
-            logger.info(
-                f"Task not in 'to do' status, skipping",
-                extra={"task_id": task_id, "status": task_status}
-            )
-            return {"status": "ignored", "reason": f"Task status is '{task_status}', not 'to do'"}
-        
-        description = task_data.get("description", "") or task_data.get("text_content", "")
-        attachments = task_data.get("attachments", [])
-        
-        # Validate task data
-        if not description:
-            await release_task_lock(task_id)  # Release before returning
-            logger.warning(
-                "No description in task",
-                extra={"task_id": task_id}
-            )
-            return {"status": "ignored", "reason": "No description found"}
-        
-        # Check custom field (AI Edit checkbox)
-        custom_fields = task_data.get("custom_fields", [])
-        needs_ai_edit = False
-        
-        # config already loaded at top of function (line 329)
-        for field in custom_fields:
-            if field.get("id") == config.clickup_custom_field_id_ai_edit:
-                if field.get("value") == "true" or field.get("value") is True:
-                    needs_ai_edit = True
-                    break
-
-        if not needs_ai_edit:
-            await release_task_lock(task_id)  # Release before returning
-            logger.warning(
-                "Custom field not checked",
-                extra={"task_id": task_id}
-            )
-            return {"status": "ignored", "reason": "AI Edit checkbox not checked"}
-        
-        if not attachments:
-            await release_task_lock(task_id)  # Release before returning
-            logger.warning(
-                "No attachments in task",
-                extra={"task_id": task_id}
-            )
-            return {"status": "ignored", "reason": "No image attached"}
-        
-        # Build attachments list for V2.0
-        attachments_data = []
-        for att in attachments:
-            att_url = att.get("url")
-            if att_url:
-                attachments_data.append({
-                    "url": att_url,
-                    "filename": att.get("title") or att.get("name") or "image.jpg",
-                    "id": att.get("id"),
-                })
-        
-        if not attachments_data:
-            await release_task_lock(task_id)  # Release before returning
-            logger.warning(
-                "No valid attachment URLs",
-                extra={"task_id": task_id}
-            )
-            return {"status": "ignored", "reason": "No attachment URL"}
-        
-        logger.info(
-            "Webhook validated, starting SYNCHRONOUS processing",
-            extra={
-                "task_id": task_id,
-                "event": event,
-                "attachment_count": len(attachments_data),
-                "description_length": len(description),
-            }
-        )
-        
+        # 🔒 LOCK ACQUIRED - Everything below is in try/finally for safe release
         # ====================================================================
-        # ✅ V2.0: SYNCHRONOUS PROCESSING WITH CLASSIFICATION
-        # ====================================================================
+        run_id = str(uuid.uuid4())[:8]  # Short unique ID for this run
+        
         try:
+            logger.info(
+                f"🚀 RUN START [{run_id}]",
+                extra={"task_id": task_id, "run_id": run_id, "event": event}
+            )
+            
+            # Fetch full task data from ClickUp API
+            logger.info(
+                "Fetching full task data from ClickUp",
+                extra={"task_id": task_id, "run_id": run_id}
+            )
+            
+            task_data = await clickup.get_task(task_id)
+            
+            # 🛡️ CHECK IF ALREADY COMPLETE
+            task_status = task_data.get("status", {}).get("status", "").lower()
+            if task_status == "complete":
+                logger.info(
+                    "Task already complete, skipping",
+                    extra={"task_id": task_id, "run_id": run_id, "status": task_status}
+                )
+                return {"status": "ignored", "reason": "Task already complete"}
+            
+            # ✅ Only process tasks in "to do" status
+            if task_status not in ["to do", "todo"]:
+                logger.info(
+                    f"Task not in 'to do' status, skipping",
+                    extra={"task_id": task_id, "run_id": run_id, "status": task_status}
+                )
+                return {"status": "ignored", "reason": f"Task status is '{task_status}', not 'to do'"}
+            
+            description = task_data.get("description", "") or task_data.get("text_content", "")
+            attachments = task_data.get("attachments", [])
+            
+            # Validate task data
+            if not description:
+                logger.warning(
+                    "No description in task",
+                    extra={"task_id": task_id, "run_id": run_id}
+                )
+                return {"status": "ignored", "reason": "No description found"}
+            
+            # Check custom field (AI Edit checkbox)
+            custom_fields = task_data.get("custom_fields", [])
+            needs_ai_edit = False
+            
+            # config already loaded at top of function (line 329)
+            for field in custom_fields:
+                if field.get("id") == config.clickup_custom_field_id_ai_edit:
+                    if field.get("value") == "true" or field.get("value") is True:
+                        needs_ai_edit = True
+                        break
+
+            if not needs_ai_edit:
+                logger.warning(
+                    "Custom field not checked",
+                    extra={"task_id": task_id, "run_id": run_id}
+                )
+                return {"status": "ignored", "reason": "AI Edit checkbox not checked"}
+            
+            if not attachments:
+                logger.warning(
+                    "No attachments in task",
+                    extra={"task_id": task_id, "run_id": run_id}
+                )
+                return {"status": "ignored", "reason": "No image attached"}
+            
+            # Build attachments list for V2.0
+            attachments_data = []
+            for att in attachments:
+                att_url = att.get("url")
+                if att_url:
+                    attachments_data.append({
+                        "url": att_url,
+                        "filename": att.get("title") or att.get("name") or "image.jpg",
+                        "id": att.get("id"),
+                    })
+            
+            if not attachments_data:
+                logger.warning(
+                    "No valid attachment URLs",
+                    extra={"task_id": task_id, "run_id": run_id}
+                )
+                return {"status": "ignored", "reason": "No attachment URL"}
+            
+            logger.info(
+                "Webhook validated, starting SYNCHRONOUS processing",
+                extra={
+                    "task_id": task_id,
+                    "run_id": run_id,
+                    "event": event,
+                    "attachment_count": len(attachments_data),
+                    "description_length": len(description),
+                }
+            )
+            
+            # ====================================================================
+            # ✅ V2.0: SYNCHRONOUS PROCESSING WITH CLASSIFICATION
+            # ====================================================================
             # Get classifier and brand analyzer
             classifier = await get_classifier(request)
             brand_analyzer = await get_brand_analyzer(request)
@@ -495,11 +499,12 @@ async def clickup_webhook(
                 clickup=clickup,
                 classifier=classifier,
                 brand_analyzer=brand_analyzer,
+                run_id=run_id,
             )
             
             logger.info(
-                "Processing completed successfully",
-                extra={"task_id": task_id}
+                f"🏁 RUN COMPLETE [{run_id}]",
+                extra={"task_id": task_id, "run_id": run_id}
             )
             
             return {
@@ -507,22 +512,27 @@ async def clickup_webhook(
                 "task_id": task_id,
             }
             
+        except HTTPException:
+            raise
         except Exception as e:
             logger.error(
-                f"Processing failed: {e}",
+                f"❌ RUN FAILED [{run_id if 'run_id' in dir() else 'N/A'}]: {e}",
                 extra={
                     "task_id": task_id,
                     "error": str(e),
                 },
                 exc_info=True
             )
-            
-            # Task will be marked as blocked in process_edit_request's exception handler
             return {
                 "status": "failed",
                 "task_id": task_id,
                 "error": str(e),
             }
+        finally:
+            # ====================================================================
+            # 🔓 ALWAYS RELEASE LOCK - This is the ONLY place lock is released
+            # ====================================================================
+            await release_task_lock(task_id)
         
     except HTTPException:
         raise
@@ -546,6 +556,7 @@ async def process_edit_request(
     clickup,
     classifier: Classifier,
     brand_analyzer: BrandAnalyzer,
+    run_id: str = "unknown",  # For tracing
 ):
     """
     Background task to process edit request.
@@ -555,12 +566,13 @@ async def process_edit_request(
     try:
         # ✅ FIRST THING: Change status to "in progress"
         await clickup.update_task_status(task_id, "in progress")
-        logger.info("Status set to 'in progress'", extra={"task_id": task_id})
+        logger.info("Status set to 'in progress'", extra={"task_id": task_id, "run_id": run_id})
         
         logger.info(
             f"Background processing started for task {task_id}",
             extra={
                 "task_id": task_id,
+                "run_id": run_id,
                 "attachment_count": len(attachments_data),
             }
         )
@@ -786,12 +798,12 @@ async def process_edit_request(
                 field_id=config.clickup_custom_field_id_ai_edit,
                 value=False,
             )
-            logger.info("Checkbox unchecked", extra={"task_id": task_id})
+            logger.info("Checkbox unchecked", extra={"task_id": task_id, "run_id": run_id})
         except Exception as e:
             logger.error(f"Failed to uncheck checkbox: {e}")
         
-        await release_task_lock(task_id)
-        logger.info("Background processing complete", extra={"task_id": task_id})
+        # ⚠️ NOTE: Lock release is now handled in the webhook handler's finally block
+        logger.info("process_edit_request complete", extra={"task_id": task_id, "run_id": run_id})
 
 
 async def _handle_simple_edit_result(result, task_id: str, clickup):
