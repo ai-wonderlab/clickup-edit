@@ -265,8 +265,8 @@ class Refiner:
                     logger.info(f"Phase 1: Enhancing step {i} for ALL models...")
                     
                     enhanced = await self.enhancer.enhance_all_parallel(
-                        original_prompt=current_step_prompt,
-                        original_images_bytes=[current_image_bytes],  # ✅ Fixed: wrap in list
+                        current_step_prompt,  # positional argument
+                        [current_image_bytes],  # ✅ List for multi-image support
                     )
                     
                     logger.info(
