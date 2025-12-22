@@ -351,13 +351,26 @@ For creative composition tasks (logo + photo + text compositing), evaluate:
    ✓ Overall mood: Emotional tone matches brand personality
    ✓ Professional execution: Meets brand quality standards
 
-5. TECHNICAL CORRECTNESS
+5. MULTI-IMAGE INPUT VERIFICATION (CRITICAL!)
+   If multiple input images were provided (logo + photo, sketch + product, etc.):
+   ✓ ALL input images incorporated: Every input must appear in output
+   ✓ Logo/branding present: If logo was in input, it MUST be in output
+   ✓ Product photos used: Input product photos must be used (not replaced)
+   ✓ Reference followed: Sketch/inspiration layout should be reflected
+   
+   AUTOMATIC FAIL (score ≤5) if:
+   • ANY input image is completely missing from output
+   • Logo from input is not visible in output
+   • Product photo was replaced with different image
+   • Multiple inputs provided but output only shows one
+
+6. TECHNICAL CORRECTNESS
    ✓ Dimension accuracy: Output matches requested aspect ratio
    ✓ Format integrity: No stretching or squashing of composition
    ✓ Image quality: No visible artifacts, blur, or degradation
    ✓ Color accuracy: Colors appear correct and intentional
 
-6. VISUAL CONSISTENCY (for 2nd+ dimensions)
+7. VISUAL CONSISTENCY (for 2nd+ dimensions)
    ✓ Content preservation: Same text, logo, colors as previous dimension
    ✓ Style continuity: Same visual mood and aesthetic maintained
    ✓ Adaptive composition: Only layout adjusted for new format, not redesigned

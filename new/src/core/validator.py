@@ -114,11 +114,10 @@ class Validator:
         validation_start = time.time()
         
         try:
-            # For validation, we pass the first original image for backward compatibility
-            # The validator API still expects single original for now
+            # Pass ALL original images for comprehensive validation
             result = await self.client.validate_image(
                 image_url=generated_image.temp_url,
-                original_image_bytes=original_images_bytes[0],  # ✅ Pass first image for comparison
+                original_images_bytes=original_images_bytes,  # ✅ Pass ALL images
                 original_request=original_request,
                 model_name=model_name,
                 validation_prompt_template=formatted_prompt,

@@ -344,7 +344,7 @@ Your output MUST be the pure prompt with zero additional text."""
     async def validate_image(
         self,
         image_url: str,  # Edited image (CloudFront URL)
-        original_image_bytes: bytes,  # Original image (PNG bytes)
+        original_images_bytes: List[bytes],  # Original images (PNG bytes) - ALL of them
         original_request: str,  # User's request
         model_name: str,  # Which model generated it
         validation_prompt_template: str  # ✅ This becomes SYSTEM prompt
@@ -369,23 +369,48 @@ Your output MUST be the pure prompt with zero additional text."""
                 system_prompt = validation_prompt_template
                 
                 # ═══════════════════════════════════════════════════════════
-                # USER PROMPT = Simple task
+                # USER PROMPT = Simple task with image count
                 # ═══════════════════════════════════════════════════════════
-                user_text = f"""Validate this edit.
+                num_originals = len(original_images_bytes)
+                if num_originals == 1:
+                    user_text = f"""Validate this edit.
 
 USER REQUEST: {original_request}
 
 Compare IMAGE 1 (original) with IMAGE 2 (edited).
 Return ONLY JSON."""
+                else:
+                    user_text = f"""Validate this edit.
+
+USER REQUEST: {original_request}
+
+Compare IMAGES 1-{num_originals} (originals/inputs) with FINAL IMAGE (edited result).
+Verify ALL input images are properly incorporated in the output.
+Return ONLY JSON."""
                 
                 # ═══════════════════════════════════════════════════════════
-                # PREPARE IMAGES
+                # PREPARE IMAGES - ALL originals + edited
                 # ═══════════════════════════════════════════════════════════
-                # Original image: bytes → base64
-                original_b64 = base64.b64encode(original_image_bytes).decode('utf-8')
-                original_data_url = f"data:image/png;base64,{original_b64}"
+                # Build user content array
+                user_content = [
+                    {
+                        "type": "text",
+                        "text": user_text
+                    }
+                ]
                 
-                # Edited image: download from URL
+                # Add ALL original images
+                for i, original_bytes in enumerate(original_images_bytes):
+                    original_b64 = base64.b64encode(original_bytes).decode('utf-8')
+                    original_data_url = f"data:image/png;base64,{original_b64}"
+                    user_content.append({
+                        "type": "image_url",
+                        "image_url": {
+                            "url": original_data_url
+                        }
+                    })
+                    logger.info(f"📷 Added original image {i+1}/{num_originals} ({len(original_bytes)/1024:.1f}KB)")
+                
                 logger.info("📥 Downloading edited image for validation")
                 async with httpx.AsyncClient(timeout=30.0) as download_client:
                     edited_response = await download_client.get(image_url)
@@ -434,7 +459,15 @@ Return ONLY JSON."""
                         edited_data_url = f"data:image/jpeg;base64,{edited_b64}"
                         logger.info(f"✅ Converted: {len(edited_bytes)/1024:.1f}KB → {len(edited_jpeg_bytes)/1024:.1f}KB JPEG")
                 
-                logger.info("✅ Both images prepared for validation")
+                # Add edited image as LAST image
+                user_content.append({
+                    "type": "image_url",
+                    "image_url": {
+                        "url": edited_data_url
+                    }
+                })
+                
+                logger.info(f"✅ All {num_originals + 1} images prepared for validation (originals + edited)")
                 
                 # ═══════════════════════════════════════════════════════════
                 # BUILD MESSAGES (system/user split)
@@ -446,24 +479,7 @@ Return ONLY JSON."""
                     },
                     {
                         "role": "user",
-                        "content": [
-                            {
-                                "type": "text",
-                                "text": user_text
-                            },
-                            {
-                                "type": "image_url",
-                                "image_url": {
-                                    "url": original_data_url
-                                }
-                            },
-                            {
-                                "type": "image_url",
-                                "image_url": {
-                                    "url": edited_data_url
-                                }
-                            }
-                        ]
+                        "content": user_content  # ✅ All images in order
                     }
                 ]
                 
@@ -490,11 +506,13 @@ Return ONLY JSON."""
                 # ═══════════════════════════════════════════════════════════
                 # DEBUG LOGGING
                 # ═══════════════════════════════════════════════════════════
+                total_original_size_kb = sum(len(b) for b in original_images_bytes) / 1024
                 logger.error(
                     f"🔍 DEBUG VALIDATION REQUEST for {model_name}",
                     extra={
                         "model": payload["model"],
-                        "original_size_kb": len(original_b64) * 0.75 / 1024,
+                        "num_original_images": num_originals,
+                        "total_original_size_kb": round(total_original_size_kb, 2),
                         "edited_size_kb": len(edited_b64) * 0.75 / 1024,
                         "system_prompt_length": len(system_prompt),
                         "max_tokens": payload["max_tokens"],
