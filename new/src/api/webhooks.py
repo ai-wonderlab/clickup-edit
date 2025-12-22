@@ -1045,7 +1045,11 @@ async def _process_branded_creative(
                 results.append(result)
                 logger.info(
                     f"Dimension {dimension} complete",
-                    extra={"task_id": task_id, "score": result.final_image}
+                    extra={
+                        "task_id": task_id, 
+                        "model": result.final_image.model_name,
+                        "temp_url": result.final_image.temp_url[:100] if result.final_image.temp_url else None
+                    }
                 )
             else:
                 logger.warning(
