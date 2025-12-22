@@ -31,13 +31,34 @@ class JSONFormatter(logging.Formatter):
         # ✅ Extract ALL extra fields dynamically
         for key, value in record.__dict__.items():
             if key not in self.BUILTIN_ATTRS and not key.startswith('_'):
-                try:
-                    # Ensure JSON serializable
-                    json.dumps(value)
-                    log_data[key] = value
-                except (TypeError, ValueError):
-                    # If not serializable, convert to string
-                    log_data[key] = str(value)
+                # ✅ Handle bytes - NEVER log raw bytes
+                if isinstance(value, bytes):
+                    log_data[key] = f"<bytes: {len(value)} bytes>"
+                elif isinstance(value, (list, tuple)):
+                    # Check for bytes in lists/tuples
+                    sanitized = []
+                    for item in value:
+                        if isinstance(item, bytes):
+                            sanitized.append(f"<bytes: {len(item)} bytes>")
+                        else:
+                            sanitized.append(item)
+                    try:
+                        json.dumps(sanitized)
+                        log_data[key] = sanitized
+                    except (TypeError, ValueError):
+                        log_data[key] = str(sanitized)
+                else:
+                    try:
+                        # Ensure JSON serializable
+                        json.dumps(value)
+                        log_data[key] = value
+                    except (TypeError, ValueError):
+                        # If not serializable, convert to string (truncate if too long)
+                        str_value = str(value)
+                        if len(str_value) > 500:
+                            log_data[key] = str_value[:500] + "...[truncated]"
+                        else:
+                            log_data[key] = str_value
         
         # Add exception info if present
         if record.exc_info:
