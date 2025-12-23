@@ -1182,16 +1182,5 @@ When adapting to an aspect ratio: expand flexible elements (backgrounds, negativ
 
 def _build_adapt_prompt(classified: ClassifiedTask, dimension: str) -> str:
     """Build adaptation prompt for subsequent dimensions."""
-    return f"""Adapt this image to {dimension} format.
-
-Keep EXACTLY the same:
-- All text content and hierarchy
-- Logo placement (relative position)
-- Color palette and style
-- Overall mood and aesthetic
-
-FRAMING PRINCIPLE:
-Professional outputs fill the canvas completely. Borders or padding = failure.
-Expand the background/negative space to fill the new aspect ratio - never compress content or add empty bands.
-
-Maintain visual consistency with the original."""
+    return f"""Recreate this exact image in {dimension} format.
+                Keep everything identical"""
