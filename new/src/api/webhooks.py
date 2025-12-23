@@ -1111,9 +1111,13 @@ def _build_branded_prompt(classified: ClassifiedTask, dimension: str) -> str:
     """Build prompt for branded creative generation."""
     parts = []
     
-    # Dimension
+    # Dimension with framing principle
     if dimension:
         parts.append(f"Create a {dimension} marketing graphic.")
+        parts.append("""
+Professional marketing graphics fill the entire canvas edge-to-edge.
+Empty borders, padding, or letterboxing indicate technical failure, not intentional design.
+When adapting to an aspect ratio: expand flexible elements (backgrounds, negative space) to fill the frame - never compress content or add empty bands.""")
     else:
         parts.append("Create a marketing graphic.")
     
@@ -1186,5 +1190,8 @@ Keep EXACTLY the same:
 - Color palette and style
 - Overall mood and aesthetic
 
-Only adjust composition for the new aspect ratio.
+FRAMING PRINCIPLE:
+Professional outputs fill the canvas completely. Borders or padding = failure.
+Expand the background/negative space to fill the new aspect ratio - never compress content or add empty bands.
+
 Maintain visual consistency with the original."""
