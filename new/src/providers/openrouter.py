@@ -413,8 +413,19 @@ Return ONLY JSON."""
                     }
                 ]
                 
-                # Add ALL original images
+                # ✅ FIX: Define max size limit for Claude
+                MAX_SIZE_FOR_CLAUDE = 3.5 * 1024 * 1024  # 3.5MB raw → ~4.7MB base64 (under 5MB)
+                
+                # Add ALL original images - RESIZED FOR CLAUDE
                 for i, original_bytes in enumerate(original_images_bytes):
+                    # Resize if too large for Claude's 5MB limit
+                    if len(original_bytes) > MAX_SIZE_FOR_CLAUDE:
+                        logger.info(f"Original image {i+1} too large ({len(original_bytes)/1024/1024:.1f}MB), resizing")
+                        original_bytes = resize_for_context(
+                            original_bytes,
+                            max_dimension=2048,
+                            quality=85
+                        )
                     original_b64 = base64.b64encode(original_bytes).decode('utf-8')
                     original_data_url = f"data:image/png;base64,{original_b64}"
                     user_content.append({
@@ -431,9 +442,7 @@ Return ONLY JSON."""
                     edited_response.raise_for_status()
                     edited_bytes = edited_response.content
 
-                # ✅ FIX: Resize/compress for Claude's 5MB limit
-                MAX_SIZE_FOR_CLAUDE = 3.5 * 1024 * 1024  # 3.5MB raw → ~4.7MB base64 (under 5MB)
-                
+                # ✅ Resize edited image if needed
                 if len(edited_bytes) > MAX_SIZE_FOR_CLAUDE:
                     logger.warning(
                         f"Image too large for validation ({len(edited_bytes)/1024/1024:.1f}MB), resizing"
