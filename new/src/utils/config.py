@@ -203,9 +203,12 @@ def load_deep_research(model_name: str) -> Dict[str, str]:
     }
 
 
-def load_validation_prompt() -> str:
+def load_validation_prompt(task_type: str = "SIMPLE_EDIT") -> str:
     """
-    Load the validation prompt template.
+    Load the validation prompt template based on task type.
+    
+    Args:
+        task_type: SIMPLE_EDIT or BRANDED_CREATIVE
     
     Returns:
         Validation prompt string
@@ -214,7 +217,16 @@ def load_validation_prompt() -> str:
         ConfigurationError: If prompt file not found
     """
     config = get_config()
-    prompt_path = config.prompts_dir / "validation_prompt.txt"
+    
+    # Use different prompt for BRANDED_CREATIVE
+    if task_type == "BRANDED_CREATIVE":
+        prompt_path = config.prompts_dir / "validation_branded_creative.txt"
+        # Fallback to default if branded file doesn't exist
+        if not prompt_path.exists():
+            logger.warning(f"Branded validation prompt not found, using default")
+            prompt_path = config.prompts_dir / "validation_prompt.txt"
+    else:
+        prompt_path = config.prompts_dir / "validation_prompt.txt"
     
     if not prompt_path.exists():
         raise ConfigurationError(f"Validation prompt not found: {prompt_path}")

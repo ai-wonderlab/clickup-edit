@@ -25,24 +25,37 @@ class Validator:
             openrouter_client: OpenRouter API client
         """
         self.client = openrouter_client
-        self.validation_prompt_template = None
+        self.validation_prompt_template = None  # Default (SIMPLE_EDIT)
+        self.validation_prompt_branded = None   # BRANDED_CREATIVE
+        self._fonts_guide = None
     
     def load_validation_prompt(self):
-        """Load validation prompt template from file and inject fonts guide."""
-        logger.info("Loading validation prompt template")
-        self.validation_prompt_template = load_validation_prompt()
+        """Load validation prompt templates from file and inject fonts guide."""
+        logger.info("Loading validation prompt templates")
         
-        # Inject fonts guide
-        fonts_guide = load_fonts_guide()
-        if fonts_guide and "{fonts_guide}" in self.validation_prompt_template:
+        # Load fonts guide once
+        self._fonts_guide = load_fonts_guide()
+        
+        # Load default (SIMPLE_EDIT) prompt
+        self.validation_prompt_template = load_validation_prompt("SIMPLE_EDIT")
+        if self._fonts_guide and "{fonts_guide}" in self.validation_prompt_template:
             self.validation_prompt_template = self.validation_prompt_template.replace(
-                "{fonts_guide}", fonts_guide
+                "{fonts_guide}", self._fonts_guide
             )
-            logger.info("Injected fonts guide into validation prompt")
-        
         logger.info(
-            "Validation prompt loaded",
+            "Default validation prompt loaded",
             extra={"length": len(self.validation_prompt_template)}
+        )
+        
+        # Load BRANDED_CREATIVE prompt
+        self.validation_prompt_branded = load_validation_prompt("BRANDED_CREATIVE")
+        if self._fonts_guide and "{fonts_guide}" in self.validation_prompt_branded:
+            self.validation_prompt_branded = self.validation_prompt_branded.replace(
+                "{fonts_guide}", self._fonts_guide
+            )
+        logger.info(
+            "Branded validation prompt loaded",
+            extra={"length": len(self.validation_prompt_branded)}
         )
     
     async def validate_single(
@@ -93,21 +106,22 @@ class Validator:
             }
         )
         
-        # Build task type instruction for validation prompt
-        task_type_instruction = f"TASK TYPE: {task_type}\n"
+        # Select prompt based on task type
         if task_type == "BRANDED_CREATIVE":
-            task_type_instruction += "Apply SECTION A (common checks) + SECTION C (branded creative) criteria.\n\n"
+            base_prompt = self.validation_prompt_branded or self.validation_prompt_template
+            prompt_source = "branded"
         else:
-            task_type_instruction += "Apply SECTION A (common checks) + SECTION B (simple edit) criteria.\n\n"
+            base_prompt = self.validation_prompt_template
+            prompt_source = "default"
         
-        formatted_prompt = task_type_instruction + self.validation_prompt_template
+        formatted_prompt = base_prompt
         
         logger.info(
-            "📝 VALIDATION PROMPT BUILT",
+            "📝 VALIDATION PROMPT SELECTED",
             extra={
                 "task_type": task_type,
+                "prompt_source": prompt_source,
                 "prompt_length": len(formatted_prompt),
-                "section_used": "A + C" if task_type == "BRANDED_CREATIVE" else "A + B",
             }
         )
         
