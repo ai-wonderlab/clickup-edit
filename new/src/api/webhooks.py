@@ -1139,15 +1139,32 @@ def _build_branded_prompt(classified: ClassifiedTask, dimension: str) -> str:
     if classified.extracted_layout:
         parts.append(f"\nLayout guide: {classified.extracted_layout.positions}")
     
-    # Style from inspiration
-    if classified.extracted_style:
-        parts.append(f"\nStyle reference: {classified.extracted_style.style}")
-    
-    # Image descriptions
+    # Image descriptions - SEPARATE BY ROLE
     if classified.images:
-        parts.append("\nImages provided:")
-        for img in classified.images:
-            parts.append(f"  - Image {img.index}: {img.description}")
+        # Determine reference indices
+        reference_indices = set()
+        if classified.extracted_layout:
+            reference_indices.add(classified.extracted_layout.from_index)
+        if classified.extracted_style:
+            reference_indices.add(classified.extracted_style.from_index)
+        
+        # Split by role
+        content_images = [img for img in classified.images if img.index not in reference_indices]
+        reference_images = [img for img in classified.images if img.index in reference_indices]
+        
+        if content_images:
+            parts.append("\n📷 CONTENT IMAGES:")
+            for img in content_images:
+                parts.append(f"  - Image {img.index}: {img.description}")
+        
+        if reference_images:
+            parts.append("\n🎯 STYLE/LAYOUT REFERENCE (follow this):")
+            for img in reference_images:
+                parts.append(f"  - Image {img.index}: {img.description}")
+    
+    # Style from inspiration - make it actionable
+    if classified.extracted_style:
+        parts.append(f"\nFollow this style: {classified.extracted_style.style}")
     
     # Brand aesthetic (from brand_analyzer, if available)
     if classified.brand_aesthetic:

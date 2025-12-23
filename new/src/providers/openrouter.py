@@ -150,12 +150,10 @@ Just the pure editing instructions."""
                 multi_image_context = ""
                 if original_images_bytes and len(original_images_bytes) > 1:
                     multi_image_context = f"""
-[MULTI-IMAGE INPUT]
-You are viewing {len(original_images_bytes)} reference images:
-- Image 1: Primary subject (usually logo or main product)
-- Image 2+: Additional elements (photos, textures, references)
-
-The edit should thoughtfully incorporate ALL provided images.
+        [MULTI-IMAGE INPUT]
+        You are viewing {len(original_images_bytes)} images.
+        Each image's role and content is described in the request below.
+        Use them according to their described purpose - do not assume which is "primary" or "secondary".
 
 """
                     logger.info(
@@ -163,7 +161,23 @@ The edit should thoughtfully incorporate ALL provided images.
                         extra={"image_count": len(original_images_bytes)}
                     )
                 
-                user_text = f"""{multi_image_context}Enhance this image editing request for {model_name}:
+                user_text = f"""{multi_image_context}You are a TRANSLATOR, not a creative director.
+
+                            Your job:
+                            - Convert the user's request into precise technical instructions for the image generation model
+                            - Include ONLY what the user explicitly asked for - do not invent requirements they didn't mention
+                            - If an INSPIRATION/REFERENCE image is provided, follow its style, layout, and positioning closely
+                            - When details are unspecified (e.g., "add logo" without position), either:
+                            a) Follow the inspiration image if one was provided, OR
+                            b) Use the most common/natural placement for that element type
+                            - Seamlessly incorporate ALL provided images according to their described roles
+
+                            What you must NEVER do:
+                            - Suggest moving/repositioning elements in the original photo
+                            - Add creative flourishes or improvements the user didn't request
+                            - Change the composition or framing of provided photos
+
+                            Enhance this image editing request for {model_name}:
 
 {original_prompt}
 
