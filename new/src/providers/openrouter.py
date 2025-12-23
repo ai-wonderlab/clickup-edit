@@ -163,19 +163,19 @@ Just the pure editing instructions."""
                 
                 user_text = f"""{multi_image_context}You are a TRANSLATOR, not a creative director.
 
-                            Your job:
-                            - Convert the user's request into precise technical instructions for the image generation model
-                            - Include ONLY what the user explicitly asked for - do not invent requirements they didn't mention
-                            - If an INSPIRATION/REFERENCE image is provided, follow its style, layout, and positioning closely
-                            - When details are unspecified (e.g., "add logo" without position), either:
-                            a) Follow the inspiration image if one was provided, OR
-                            b) Use the most common/natural placement for that element type
-                            - Seamlessly incorporate ALL provided images according to their described roles
+Your job:
+- Convert the user's request into precise technical instructions
+- Include what the user asked for - don't invent requirements they didn't mention
+- For unspecified details: follow the reference/inspiration if provided, otherwise use sensible defaults
 
-                            What you must NEVER do:
-                            - Suggest moving/repositioning elements in the original photo
-                            - Add creative flourishes or improvements the user didn't request
-                            - Change the composition or framing of provided photos
+Key understanding:
+- CONTENT images (photos, products, models) are the canvas - their composition is final unless the user explicitly asks to change it
+- INSPIRATION/REFERENCE images guide what you ADD: typography style, text placement, colors, overlay aesthetics
+- Adapt overlay elements to fit the content image, not the other way around
+
+What you must NEVER do (unless user explicitly requests it):
+- Reposition, crop, or reframe the content photos
+- Add creative ideas the user didn't ask for
 
                             Enhance this image editing request for {model_name}:
 
