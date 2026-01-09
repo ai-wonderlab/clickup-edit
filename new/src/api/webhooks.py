@@ -493,7 +493,7 @@ async def clickup_webhook(
                     "role": "main",
                 })
             
-            # Additional images
+            # Additional images second
             for att in parsed.additional_images:
                 attachments_data.append({
                     "url": att.url,
@@ -501,20 +501,20 @@ async def clickup_webhook(
                     "role": "additional",
                 })
             
-            # Reference images (for context only)
-            for att in parsed.reference_images:
-                attachments_data.append({
-                    "url": att.url,
-                    "filename": att.filename,
-                    "role": "reference",
-                })
-            
-            # Logo
+            # Logo third
             for att in parsed.logo:
                 attachments_data.append({
                     "url": att.url,
                     "filename": att.filename,
                     "role": "logo",
+                })
+            
+            # Reference images last (for context only)
+            for att in parsed.reference_images:
+                attachments_data.append({
+                    "url": att.url,
+                    "filename": att.filename,
+                    "role": "reference",
                 })
             
             logger.info(
@@ -674,12 +674,15 @@ async def process_edit_request(
                     continue
                 
                 # Store by role
-                if role == "main" or role == "additional":
+                if role == "main":
                     main_images.append((png_filename, png_bytes, uploaded_url))
-                elif role == "reference":
-                    reference_images.append((png_filename, png_bytes, uploaded_url))
+                elif role == "additional":
+                    main_images.append((png_filename, png_bytes, uploaded_url))  # Goes to generation
                 elif role == "logo":
                     logo_images.append((png_filename, png_bytes, uploaded_url))
+                    main_images.append((png_filename, png_bytes, uploaded_url))  # ALSO goes to generation!
+                elif role == "reference":
+                    reference_images.append((png_filename, png_bytes, uploaded_url))  # Context only
                 
                 logger.info(
                     f"Attachment {i + 1} processed",
@@ -1027,9 +1030,62 @@ When adapting to an aspect ratio: expand flexible elements (backgrounds, negativ
     if parsed_task.extra_notes:
         parts.append(f"\nAdditional instructions: {parsed_task.extra_notes}")
     
-    # Reference images context
-    if parsed_task.reference_images:
-        parts.append(f"\nReference images provided for style/layout guidance.")
+    # =====================================================================
+    # CRITICAL: Explicit image role mapping to prevent hallucination
+    # =====================================================================
+    main_count = len(parsed_task.main_image)
+    additional_count = len(parsed_task.additional_images)
+    logo_count = len(parsed_task.logo)
+    ref_count = len(parsed_task.reference_images)
+    
+    parts.append("\n" + "=" * 60)
+    parts.append("IMAGE ROLES (CRITICAL - READ CAREFULLY):")
+    parts.append("=" * 60)
+    
+    current_idx = 1
+    
+    # Main images - INCLUDE
+    if main_count > 0:
+        if main_count == 1:
+            parts.append(f"• Image {current_idx}: MAIN CONTENT")
+            parts.append(f"  → Primary image. Use as the main visual in output.")
+        else:
+            parts.append(f"• Images {current_idx}-{current_idx + main_count - 1}: MAIN CONTENT")
+            parts.append(f"  → Primary images. Include all in output composition.")
+        current_idx += main_count
+    
+    # Additional images - INCLUDE
+    if additional_count > 0:
+        if additional_count == 1:
+            parts.append(f"• Image {current_idx}: ADDITIONAL CONTENT")
+            parts.append(f"  → Include in output alongside main content.")
+        else:
+            parts.append(f"• Images {current_idx}-{current_idx + additional_count - 1}: ADDITIONAL CONTENT")
+            parts.append(f"  → Include all in output alongside main content.")
+        current_idx += additional_count
+    
+    # Logo - INCLUDE
+    if logo_count > 0:
+        parts.append(f"• Image {current_idx}: BRAND LOGO")
+        parts.append(f"  → Place in output. Position per user instructions or brand-appropriate location.")
+        current_idx += logo_count
+    
+    # Reference images - DO NOT INCLUDE
+    if ref_count > 0:
+        if ref_count == 1:
+            parts.append(f"• Image {current_idx}: ⚠️ REFERENCE ONLY ⚠️")
+            parts.append(f"  → Style/layout inspiration. Do NOT include its content in output!")
+        else:
+            parts.append(f"• Images {current_idx}-{current_idx + ref_count - 1}: ⚠️ REFERENCE ONLY ⚠️")
+            parts.append(f"  → Style/layout inspiration. Do NOT include their content in output!")
+    
+    parts.append("=" * 60)
+    
+    # Summary
+    include_count = main_count + additional_count + logo_count
+    parts.append(f"\nOutput must contain: {include_count} image(s) + text overlay.")
+    if ref_count > 0:
+        parts.append(f"Reference images are for inspiration only.")
     
     # Brand aesthetic
     if brand_aesthetic:

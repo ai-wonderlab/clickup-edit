@@ -288,8 +288,64 @@ class TaskParser:
         if parsed.extra_notes:
             parts.append(f"\nAdditional instructions: {parsed.extra_notes}")
         
-        # Reference images context
-        if parsed.reference_images:
-            parts.append(f"\nReference images provided for style/layout guidance.")
+        # =====================================================================
+        # CRITICAL: Explicit image role mapping to prevent hallucination
+        # =====================================================================
+        main_count = len(parsed.main_image)
+        additional_count = len(parsed.additional_images)
+        logo_count = len(parsed.logo)
+        ref_count = len(parsed.reference_images)
+        
+        parts.append("\n" + "=" * 60)
+        parts.append("IMAGE ROLES (CRITICAL - READ CAREFULLY):")
+        parts.append("=" * 60)
+        
+        current_idx = 1
+        
+        # Main images - INCLUDE
+        if main_count > 0:
+            if main_count == 1:
+                parts.append(f"• Image {current_idx}: MAIN CONTENT")
+                parts.append(f"  → This is the primary image. Use it as the main visual in the output.")
+            else:
+                parts.append(f"• Images {current_idx}-{current_idx + main_count - 1}: MAIN CONTENT")
+                parts.append(f"  → These are the primary images. Include all in the output composition.")
+            current_idx += main_count
+        
+        # Additional images - INCLUDE
+        if additional_count > 0:
+            if additional_count == 1:
+                parts.append(f"• Image {current_idx}: ADDITIONAL CONTENT")
+                parts.append(f"  → Include this image in the output composition alongside main content.")
+            else:
+                parts.append(f"• Images {current_idx}-{current_idx + additional_count - 1}: ADDITIONAL CONTENT")
+                parts.append(f"  → Include these images in the output composition alongside main content.")
+            current_idx += additional_count
+        
+        # Logo - INCLUDE (with placement guidance)
+        if logo_count > 0:
+            parts.append(f"• Image {current_idx}: BRAND LOGO")
+            parts.append(f"  → Place this logo in the output. Position according to user instructions,")
+            parts.append(f"    or if not specified, place appropriately based on brand identity and composition.")
+            current_idx += logo_count
+        
+        # Reference images - DO NOT INCLUDE
+        if ref_count > 0:
+            if ref_count == 1:
+                parts.append(f"• Image {current_idx}: ⚠️ REFERENCE ONLY ⚠️")
+                parts.append(f"  → Use ONLY for style/layout/color inspiration.")
+                parts.append(f"  → Do NOT include this image's content, people, or products in output!")
+            else:
+                parts.append(f"• Images {current_idx}-{current_idx + ref_count - 1}: ⚠️ REFERENCE ONLY ⚠️")
+                parts.append(f"  → Use ONLY for style/layout/color inspiration.")
+                parts.append(f"  → Do NOT include these images' content, people, or products in output!")
+        
+        parts.append("=" * 60)
+        
+        # Summary for clarity
+        include_count = main_count + additional_count + logo_count
+        parts.append(f"\nSUMMARY: Output should contain content from {include_count} image(s).")
+        if ref_count > 0:
+            parts.append(f"Reference image(s) are for inspiration only - do not reproduce their content.")
         
         return "\n".join(parts)
