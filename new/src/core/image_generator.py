@@ -28,6 +28,7 @@ class ImageGenerator:
         self,
         enhanced_prompt: EnhancedPrompt,
         image_urls: List[str],  # ← CHANGED: Now accepts list of URLs
+        aspect_ratio: str = None,  # ← NEW: Aspect ratio for output
     ) -> GeneratedImage:
         """
         Generate image with a single model.
@@ -35,6 +36,7 @@ class ImageGenerator:
         Args:
             enhanced_prompt: Enhanced prompt for specific model
             image_urls: List of image URLs to edit (supports multi-image)
+            aspect_ratio: Optional aspect ratio for the output image
             
         Returns:
             GeneratedImage
@@ -68,6 +70,7 @@ class ImageGenerator:
                 prompt=enhanced_prompt.enhanced,
                 image_urls=image_urls,  # ← CHANGED: Pass list of URLs
                 model_name=model_name,
+                aspect_ratio=aspect_ratio,  # ← NEW: Pass aspect ratio
             )
 
             gen_duration = time.time() - gen_start
@@ -116,6 +119,7 @@ class ImageGenerator:
         self,
         enhanced_prompts: List[EnhancedPrompt],
         image_urls: List[str],  # ← CHANGED: Now accepts list of URLs
+        aspect_ratio: str = None,  # ← NEW: Aspect ratio for output
     ) -> List[GeneratedImage]:
         """
         Generate images with ALL enhanced prompts in parallel.
@@ -123,6 +127,7 @@ class ImageGenerator:
         Args:
             enhanced_prompts: List of enhanced prompts
             image_urls: List of image URLs to edit (supports multi-image)
+            aspect_ratio: Optional aspect ratio for the output image
             
         Returns:
             List of successful GeneratedImage objects
@@ -156,7 +161,7 @@ class ImageGenerator:
         
         # Create tasks for all prompts
         tasks = [
-            self.generate_single(prompt, image_urls)  # ← CHANGED: Pass list of URLs
+            self.generate_single(prompt, image_urls, aspect_ratio)  # ← CHANGED: Pass list of URLs + aspect_ratio
             for prompt in enhanced_prompts
         ]
         

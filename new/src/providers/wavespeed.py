@@ -41,6 +41,7 @@ class WaveSpeedAIClient(BaseProvider):
         prompt: str,
         image_urls: List[str],  # ← CHANGED: Now accepts list of URLs
         model_name: str,
+        aspect_ratio: str = None,  # ← NEW: Aspect ratio for output (e.g., "16:9", "1:1")
     ) -> tuple[bytes, str]:
         """Generate edited image using WaveSpeed API.
         
@@ -48,6 +49,7 @@ class WaveSpeedAIClient(BaseProvider):
             prompt: The edit prompt
             image_urls: List of image URLs to use (supports multi-image)
             model_name: The model to use
+            aspect_ratio: Optional aspect ratio for the output image
         
         Returns:
             Tuple of (image_bytes, cloudfront_url)
@@ -79,6 +81,11 @@ class WaveSpeedAIClient(BaseProvider):
             "enable_base64_output": False,
             "enable_sync_mode": False,
         }
+        
+        # Add aspect_ratio if provided
+        if aspect_ratio:
+            payload["aspect_ratio"] = aspect_ratio
+            logger.info(f"📐 Aspect ratio set: {aspect_ratio}")
         
         # Add model-specific parameters
         if "qwen" in model_name.lower():

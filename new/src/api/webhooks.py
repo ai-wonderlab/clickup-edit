@@ -938,6 +938,7 @@ async def _process_branded_creative_v2(
                 additional_image_urls=additional_urls,
                 additional_image_bytes=additional_bytes,
                 context_image_bytes=ctx_bytes,
+                aspect_ratio=dimension,  # ✅ NEW: Pass dimension as aspect ratio to WaveSpeed
             )
             
             if result.status == "success":
@@ -1302,6 +1303,7 @@ async def _process_branded_creative(
                 additional_image_urls=additional_urls,      # → WaveSpeed only
                 additional_image_bytes=additional_bytes,    # → WaveSpeed only
                 context_image_bytes=context_bytes,          # ✅ NEW: → Claude only
+                aspect_ratio=dimension,                     # ✅ NEW: Pass dimension as aspect ratio to WaveSpeed
             )
             
             if result.status == "success":

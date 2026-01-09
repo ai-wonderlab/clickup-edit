@@ -131,6 +131,7 @@ class Orchestrator:
         additional_image_urls: List[str] = None,      # → WaveSpeed generation
         additional_image_bytes: List[bytes] = None,   # → WaveSpeed generation
         context_image_bytes: List[bytes] = None,      # ✅ NEW: → Claude enhancement only
+        aspect_ratio: str = None,                     # ✅ NEW: Aspect ratio for WaveSpeed
     ) -> ProcessResult:
         """
         Process edit request with iterative refinement.
@@ -144,6 +145,7 @@ class Orchestrator:
             additional_image_urls: Extra images for WaveSpeed generation
             additional_image_bytes: Extra image bytes for WaveSpeed generation
             context_image_bytes: ALL images for Claude enhancement context (includes reference/inspiration)
+            aspect_ratio: Aspect ratio for WaveSpeed output (e.g., "16:9", "1:1")
             
         Returns:
             ProcessResult with final outcome
@@ -214,7 +216,8 @@ class Orchestrator:
                 
                 generated = await self.generator.generate_all_parallel(
                     enhanced,
-                    generation_urls  # ✅ Only images to include in output
+                    generation_urls,  # ✅ Only images to include in output
+                    aspect_ratio,     # ✅ NEW: Pass aspect ratio to WaveSpeed
                 )
                 
                 # Phase 3: Parallel Validation
