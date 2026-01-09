@@ -14,7 +14,6 @@ from .core import (
     Refiner, 
     HybridFallback, 
     Orchestrator,
-    Classifier,
     BrandAnalyzer,
     TaskParser,
 )
@@ -88,10 +87,7 @@ async def lifespan(app: FastAPI):
         hybrid_fallback = HybridFallback(
             clickup_client=clickup,
         )
-        
-        # Initialize classifier
-        classifier = Classifier(openrouter_client=openrouter)
-        
+                
         # Initialize brand analyzer
         brand_analyzer = BrandAnalyzer(openrouter_client=openrouter)
         
@@ -127,7 +123,6 @@ async def lifespan(app: FastAPI):
         app.state.validator = validator
         app.state.refiner = refiner
         app.state.hybrid_fallback = hybrid_fallback
-        app.state.classifier = classifier
         app.state.brand_analyzer = brand_analyzer
         app.state.task_parser = task_parser
         

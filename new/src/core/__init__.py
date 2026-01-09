@@ -17,7 +17,6 @@ __all__ = [
     "Refiner",
     "HybridFallback",
     "Orchestrator",
-    "Classifier",
     "BrandAnalyzer",
     "TaskParser",
     "ParsedTask",
