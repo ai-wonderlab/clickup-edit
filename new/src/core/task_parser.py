@@ -1,6 +1,6 @@
 """Task parser - extracts structured data from ClickUp custom fields.
 
-Replaces AI classifier with deterministic field parsing.
+Deterministic field parsing for task routing.
 """
 
 from typing import List, Optional, Dict, Any

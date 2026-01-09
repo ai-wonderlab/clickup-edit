@@ -96,10 +96,10 @@ class IterationMetrics(BaseModel):
     errors: List[str] = Field(default_factory=list)
 
 
-# === V2.0 SIMPLIFIED CLASSIFIER SCHEMAS ===
+# === V2.0 TASK SCHEMAS (LEGACY - kept for compatibility) ===
 
 class ClassifiedImage(BaseModel):
-    """Simple image description from classifier."""
+    """Simple image description."""
     index: int
     description: str
 
@@ -124,7 +124,7 @@ class ClassifiedBrief(BaseModel):
 
 
 class ClassifiedTask(BaseModel):
-    """Simplified classified task from classifier."""
+    """Task data structure (legacy - kept for compatibility)."""
     task_type: TaskType
     dimensions: List[str] = Field(default_factory=list)
     brief: ClassifiedBrief

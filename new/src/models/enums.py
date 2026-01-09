@@ -37,7 +37,7 @@ class IterationStage(str, Enum):
 
 
 class TaskType(str, Enum):
-    """Type of task detected by classifier."""
+    """Type of task from custom fields."""
     SIMPLE_EDIT = "simple_edit"
     BRANDED_CREATIVE = "branded_creative"
 

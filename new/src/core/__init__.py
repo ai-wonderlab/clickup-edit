@@ -6,7 +6,6 @@ from .validator import Validator
 from .refiner import Refiner
 from .hybrid_fallback import HybridFallback
 from .orchestrator import Orchestrator
-from .classifier import Classifier
 from .brand_analyzer import BrandAnalyzer
 from .task_parser import TaskParser, ParsedTask, ParsedAttachment
 

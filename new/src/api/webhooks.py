@@ -15,7 +15,6 @@ from ..utils.config import get_config
 from ..utils.image_converter import ImageConverter
 from ..utils.images import get_closest_aspect_ratio
 from ..utils.errors import UnsupportedFormatError, ImageConversionError
-from ..core.classifier import Classifier
 from ..core.brand_analyzer import BrandAnalyzer
 from ..core.task_parser import TaskParser, ParsedTask
 from ..models.enums import TaskType
@@ -300,11 +299,6 @@ async def get_orchestrator(request: Request):
 async def get_clickup_client(request: Request):
     """Dependency to get ClickUp client from app state."""
     return request.app.state.clickup
-
-
-async def get_classifier(request: Request):
-    """Dependency to get classifier from app state."""
-    return request.app.state.classifier
 
 
 async def get_brand_analyzer(request: Request):
@@ -609,7 +603,7 @@ async def process_edit_request(
     """
     Process edit request - simplified with parsed task data.
     
-    V3.0: No more classifier - routing is based on parsed_task.task_type
+    Routing is based on parsed_task.task_type from custom fields.
     """
     try:
         # ✅ FIRST THING: Change status to "in progress"
@@ -882,7 +876,7 @@ async def _process_branded_creative_v2(
     """
     Process BRANDED_CREATIVE task with dimension loop.
     
-    V3.0: Uses parsed task data instead of classifier.
+    Uses parsed task data from custom fields.
     """
     config = get_config()
     results = []
@@ -1181,7 +1175,7 @@ async def _process_branded_creative(
             extra={"task_id": task_id, "dimensions": dimensions}
         )
     else:
-        # Use PRIMARY image (identified by classifier) for dimensions
+        # Use PRIMARY image for dimensions
         primary_index = classified.primary_image_index
         
         # Validate index is within bounds
