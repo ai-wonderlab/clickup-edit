@@ -16,6 +16,7 @@ from .core import (
     Orchestrator,
     Classifier,
     BrandAnalyzer,
+    TaskParser,
 )
 from .utils.config import load_config, get_config
 from .utils.logger import get_logger
@@ -94,6 +95,9 @@ async def lifespan(app: FastAPI):
         # Initialize brand analyzer
         brand_analyzer = BrandAnalyzer(openrouter_client=openrouter)
         
+        # Initialize task parser
+        task_parser = TaskParser()
+        
         max_iterations = config.processing.max_iterations if config.processing else 3
         
         # ============================================================================
@@ -125,6 +129,7 @@ async def lifespan(app: FastAPI):
         app.state.hybrid_fallback = hybrid_fallback
         app.state.classifier = classifier
         app.state.brand_analyzer = brand_analyzer
+        app.state.task_parser = task_parser
         
         # Store BOTH orchestrators
         app.state.orchestrator = orchestrator           # OLD (fallback)

@@ -8,6 +8,7 @@ from .hybrid_fallback import HybridFallback
 from .orchestrator import Orchestrator
 from .classifier import Classifier
 from .brand_analyzer import BrandAnalyzer
+from .task_parser import TaskParser, ParsedTask, ParsedAttachment
 
 __all__ = [
     "PromptEnhancer",
@@ -18,4 +19,7 @@ __all__ = [
     "Orchestrator",
     "Classifier",
     "BrandAnalyzer",
+    "TaskParser",
+    "ParsedTask",
+    "ParsedAttachment",
 ]

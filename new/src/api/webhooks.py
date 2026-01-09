@@ -17,6 +17,7 @@ from ..utils.images import get_closest_aspect_ratio
 from ..utils.errors import UnsupportedFormatError, ImageConversionError
 from ..core.classifier import Classifier
 from ..core.brand_analyzer import BrandAnalyzer
+from ..core.task_parser import TaskParser, ParsedTask
 from ..models.enums import TaskType
 
 logger = get_logger(__name__)
@@ -311,6 +312,11 @@ async def get_brand_analyzer(request: Request):
     return request.app.state.brand_analyzer
 
 
+async def get_task_parser(request: Request):
+    """Dependency to get task parser from app state."""
+    return request.app.state.task_parser
+
+
 # ============================================================================
 # WEBHOOK ENDPOINT
 # ============================================================================
@@ -423,22 +429,10 @@ async def clickup_webhook(
                 )
                 return {"status": "ignored", "reason": f"Task status is '{task_status}', not 'to do'"}
             
-            description = task_data.get("description", "") or task_data.get("text_content", "")
-            attachments = task_data.get("attachments", [])
-            
-            # Validate task data
-            if not description:
-                logger.warning(
-                    "No description in task",
-                    extra={"task_id": task_id, "run_id": run_id}
-                )
-                return {"status": "ignored", "reason": "No description found"}
-            
             # Check custom field (AI Edit checkbox)
             custom_fields = task_data.get("custom_fields", [])
             needs_ai_edit = False
             
-            # config already loaded at top of function (line 329)
             for field in custom_fields:
                 if field.get("id") == config.clickup_custom_field_id_ai_edit:
                     if field.get("value") == "true" or field.get("value") is True:
@@ -452,30 +446,82 @@ async def clickup_webhook(
                 )
                 return {"status": "ignored", "reason": "AI Edit checkbox not checked"}
             
-            if not attachments:
-                logger.warning(
-                    "No attachments in task",
-                    extra={"task_id": task_id, "run_id": run_id}
-                )
-                return {"status": "ignored", "reason": "No image attached"}
+            # ====================================================================
+            # ✅ V3.0: PARSE TASK FROM CUSTOM FIELDS
+            # ====================================================================
+            task_parser = await get_task_parser(request)
+            parsed = task_parser.parse(task_data)
             
-            # Build attachments list for V2.0
+            # Validate required fields based on task type
+            if parsed.is_edit:
+                if not parsed.main_image:
+                    logger.warning(
+                        "Edit task requires Main Image",
+                        extra={"task_id": task_id, "run_id": run_id}
+                    )
+                    return {"status": "ignored", "reason": "Edit task requires Main Image"}
+            elif parsed.is_creative:
+                if not parsed.main_image:
+                    logger.warning(
+                        "Creative task requires Main Image",
+                        extra={"task_id": task_id, "run_id": run_id}
+                    )
+                    return {"status": "ignored", "reason": "Creative task requires Main Image"}
+                if not parsed.main_text:
+                    logger.warning(
+                        "Creative task requires Main Text",
+                        extra={"task_id": task_id, "run_id": run_id}
+                    )
+                    return {"status": "ignored", "reason": "Creative task requires Main Text"}
+            
+            # Build prompt from parsed fields
+            prompt = task_parser.build_prompt(parsed)
+            
+            logger.info(
+                "Task parsed from custom fields",
+                extra={
+                    "task_id": task_id,
+                    "run_id": run_id,
+                    "task_type": parsed.task_type,
+                    "dimensions": parsed.dimensions,
+                    "has_reference": len(parsed.reference_images) > 0,
+                }
+            )
+            
+            # Build attachments list with roles
             attachments_data = []
-            for att in attachments:
-                att_url = att.get("url")
-                if att_url:
-                    attachments_data.append({
-                        "url": att_url,
-                        "filename": att.get("title") or att.get("name") or "image.jpg",
-                        "id": att.get("id"),
-                    })
             
-            if not attachments_data:
-                logger.warning(
-                    "No valid attachment URLs",
-                    extra={"task_id": task_id, "run_id": run_id}
-                )
-                return {"status": "ignored", "reason": "No attachment URL"}
+            # Main images first
+            for att in parsed.main_image:
+                attachments_data.append({
+                    "url": att.url,
+                    "filename": att.filename,
+                    "role": "main",
+                })
+            
+            # Additional images
+            for att in parsed.additional_images:
+                attachments_data.append({
+                    "url": att.url,
+                    "filename": att.filename,
+                    "role": "additional",
+                })
+            
+            # Reference images (for context only)
+            for att in parsed.reference_images:
+                attachments_data.append({
+                    "url": att.url,
+                    "filename": att.filename,
+                    "role": "reference",
+                })
+            
+            # Logo
+            for att in parsed.logo:
+                attachments_data.append({
+                    "url": att.url,
+                    "filename": att.filename,
+                    "role": "logo",
+                })
             
             logger.info(
                 "Webhook validated, starting SYNCHRONOUS processing",
@@ -484,24 +530,22 @@ async def clickup_webhook(
                     "run_id": run_id,
                     "event": event,
                     "attachment_count": len(attachments_data),
-                    "description_length": len(description),
+                    "prompt_length": len(prompt),
                 }
             )
             
             # ====================================================================
-            # ✅ V2.0: SYNCHRONOUS PROCESSING WITH CLASSIFICATION
+            # ✅ V3.0: SYNCHRONOUS PROCESSING WITH PARSED TASK
             # ====================================================================
-            # Get classifier and brand analyzer
-            classifier = await get_classifier(request)
             brand_analyzer = await get_brand_analyzer(request)
             
             await process_edit_request(
                 task_id=task_id,
-                prompt=description,
+                prompt=prompt,
                 attachments_data=attachments_data,
+                parsed_task=parsed,
                 orchestrator=orchestrator,
                 clickup=clickup,
-                classifier=classifier,
                 brand_analyzer=brand_analyzer,
                 run_id=run_id,
             )
@@ -555,17 +599,17 @@ async def clickup_webhook(
 async def process_edit_request(
     task_id: str,
     prompt: str,
-    attachments_data: List[dict],  # CHANGED: List of {url, filename, id}
+    attachments_data: List[dict],  # List of {url, filename, role}
+    parsed_task: ParsedTask,
     orchestrator,
     clickup,
-    classifier: Classifier,
     brand_analyzer: BrandAnalyzer,
-    run_id: str = "unknown",  # For tracing
+    run_id: str = "unknown",
 ):
     """
-    Background task to process edit request.
+    Process edit request - simplified with parsed task data.
     
-    V2.0: Supports multiple attachments and task classification.
+    V3.0: No more classifier - routing is based on parsed_task.task_type
     """
     try:
         # ✅ FIRST THING: Change status to "in progress"
@@ -577,39 +621,42 @@ async def process_edit_request(
             extra={
                 "task_id": task_id,
                 "run_id": run_id,
+                "task_type": parsed_task.task_type,
                 "attachment_count": len(attachments_data),
             }
         )
         
         # ================================================================
-        # PHASE 1: DOWNLOAD ALL ATTACHMENTS
+        # PHASE 1: DOWNLOAD ATTACHMENTS BY ROLE
         # ================================================================
-        downloaded_attachments = []  # [(filename, png_bytes), ...]
-        attachment_urls = {}  # {index: url} for later use
+        main_images = []      # For generation: (filename, bytes, url)
+        reference_images = [] # For context only: (filename, bytes, url)
+        logo_images = []      # For overlay: (filename, bytes, url)
         
         converter = ImageConverter()
         
         logger.info(
-            "🔍 DEBUG: Starting attachment download phase",
+            "Starting attachment download phase",
             extra={
                 "task_id": task_id,
                 "total_attachments": len(attachments_data),
-                "attachment_filenames": [a.get("filename") for a in attachments_data],
+                "attachment_roles": [a.get("role") for a in attachments_data],
             }
         )
         
         for i, att_data in enumerate(attachments_data):
-            attachment_url = att_data.get("url")
-            filename = att_data.get("filename", f"image_{i}.jpg")
+            role = att_data.get("role", "main")
+            url = att_data["url"]
+            filename = att_data["filename"]
             
             logger.info(
                 f"Downloading attachment {i + 1}/{len(attachments_data)}",
-                extra={"task_id": task_id, "file_name": filename, "index": i}
+                extra={"task_id": task_id, "file_name": filename, "role": role}
             )
             
             try:
                 # Download
-                original_bytes = await clickup.download_attachment(attachment_url)
+                original_bytes = await clickup.download_attachment(url)
                 
                 # Convert to PNG (async)
                 png_bytes, png_filename = await converter.convert_to_png(
@@ -617,42 +664,35 @@ async def process_edit_request(
                     filename=filename
                 )
                 
-                downloaded_attachments.append((png_filename, png_bytes))
-                
                 # Upload PNG to ClickUp and get URL directly from response
                 upload_result = await clickup.upload_attachment(
                     task_id=task_id,
                     image_bytes=png_bytes,
                     filename=png_filename
                 )
-                
-                # Use URL directly from upload response (no race condition!)
                 uploaded_url = upload_result.get("url")
-                if uploaded_url:
-                    attachment_urls[i] = uploaded_url
-                    logger.info(
-                        f"🔍 DEBUG: URL captured directly from upload response for index {i}",
-                        extra={
-                            "task_id": task_id,
-                            "index": i,
-                            "url_preview": uploaded_url[:50] + "..." if uploaded_url else None,
-                        }
-                    )
-                else:
+                
+                if not uploaded_url:
                     logger.error(
-                        f"🔍 DEBUG: Upload response missing URL for index {i}",
-                        extra={
-                            "task_id": task_id,
-                            "index": i,
-                            "upload_result": upload_result,
-                        }
+                        f"Upload response missing URL for {filename}",
+                        extra={"task_id": task_id, "index": i}
                     )
+                    continue
+                
+                # Store by role
+                if role == "main" or role == "additional":
+                    main_images.append((png_filename, png_bytes, uploaded_url))
+                elif role == "reference":
+                    reference_images.append((png_filename, png_bytes, uploaded_url))
+                elif role == "logo":
+                    logo_images.append((png_filename, png_bytes, uploaded_url))
                 
                 logger.info(
                     f"Attachment {i + 1} processed",
                     extra={
                         "task_id": task_id,
                         "file_name": png_filename,
+                        "role": role,
                         "size_kb": len(png_bytes) / 1024,
                     }
                 )
@@ -662,79 +702,53 @@ async def process_edit_request(
                     f"Attachment {i + 1} failed: {e}",
                     extra={"task_id": task_id, "file_name": filename}
                 )
-                # Continue with other attachments
                 continue
         
-        # 🔍 DEBUG: Summary after PHASE 1
         logger.info(
-            "🔍 DEBUG: PHASE 1 COMPLETE - Attachment summary",
+            "PHASE 1 COMPLETE - Attachment summary",
             extra={
                 "task_id": task_id,
-                "downloaded_count": len(downloaded_attachments),
-                "url_count": len(attachment_urls),
-                "url_indices": list(attachment_urls.keys()),
-                "downloaded_filenames": [f[0] for f in downloaded_attachments],
+                "main_count": len(main_images),
+                "reference_count": len(reference_images),
+                "logo_count": len(logo_images),
             }
         )
         
-        if not downloaded_attachments:
+        if not main_images:
             await clickup.update_task_status(
                 task_id=task_id,
                 status="blocked",
-                comment="❌ **No valid images found**\n\nCould not process any attachments."
+                comment="❌ **No valid images found**\n\nCould not process any main images."
             )
             return
         
         # ================================================================
-        # PHASE 2: CLASSIFY TASK
+        # PHASE 2: BRAND ANALYSIS (if website provided)
         # ================================================================
-        logger.info("Starting classification", extra={"task_id": task_id})
-        
-        classified = await classifier.classify(
-            description=prompt,
-            attachments=downloaded_attachments,
-        )
-        
-        logger.info(
-            "Classification complete",
-            extra={
-                "task_id": task_id,
-                "task_type": classified.task_type.value,
-                "dimensions": classified.dimensions,
-            }
-        )
-        
-        # ================================================================
-        # PHASE 3: BRAND ANALYSIS (if website detected)
-        # ================================================================
-        if classified.website_url:
+        brand_aesthetic = None
+        if parsed_task.brand_website:
             logger.info(
                 "Starting brand analysis",
-                extra={"task_id": task_id, "website": classified.website_url[:80] + "..." if len(classified.website_url) > 80 else classified.website_url}
+                extra={"task_id": task_id, "website": parsed_task.brand_website[:80]}
             )
             
-            brand_result = await brand_analyzer.analyze(classified.website_url)
-            
+            brand_result = await brand_analyzer.analyze(parsed_task.brand_website)
             if brand_result:
-                classified.brand_aesthetic = brand_result.get("brand_aesthetic")
-                logger.info(
-                    "Brand analysis complete",
-                    extra={"task_id": task_id}
-                )
+                brand_aesthetic = brand_result.get("brand_aesthetic")
+                logger.info("Brand analysis complete", extra={"task_id": task_id})
         
         # ================================================================
-        # PHASE 4: ROUTE AND EXECUTE
+        # PHASE 3: ROUTE BY TASK TYPE
         # ================================================================
         
-        if classified.task_type == TaskType.SIMPLE_EDIT:
+        if parsed_task.is_edit:
             # ============================================================
-            # SIMPLE_EDIT: Use first image (simplified)
+            # SIMPLE EDIT FLOW
             # ============================================================
             logger.info("Routing to SIMPLE_EDIT flow", extra={"task_id": task_id})
             
-            # ✅ SIMPLIFIED: Just use first attachment
-            main_url = attachment_urls.get(0)
-            main_bytes = downloaded_attachments[0][1] if downloaded_attachments else None
+            main_url = main_images[0][2] if main_images else None
+            main_bytes = main_images[0][1] if main_images else None
             
             if not main_url or not main_bytes:
                 await clickup.update_task_status(
@@ -744,7 +758,6 @@ async def process_edit_request(
                 )
                 return
             
-            # Call existing flow
             result = await orchestrator.process_with_iterations(
                 task_id=task_id,
                 prompt=prompt,
@@ -753,26 +766,37 @@ async def process_edit_request(
                 task_type="SIMPLE_EDIT",
             )
             
-            # Handle result (existing logic)
             await _handle_simple_edit_result(result, task_id, clickup)
             
         else:
             # ============================================================
-            # BRANDED_CREATIVE: New flow with dimension loop
+            # BRANDED CREATIVE FLOW
             # ============================================================
             logger.info(
                 "Routing to BRANDED_CREATIVE flow",
                 extra={
                     "task_id": task_id,
-                    "dimensions": classified.dimensions,
+                    "dimensions": parsed_task.dimensions,
                 }
             )
             
-            await _process_branded_creative(
+            dimensions = parsed_task.dimensions or ["1:1"]
+            
+            # Prepare image lists
+            generation_urls = [img[2] for img in main_images]
+            generation_bytes = [img[1] for img in main_images]
+            context_bytes = [img[1] for img in main_images + reference_images]
+            
+            await _process_branded_creative_v2(
                 task_id=task_id,
-                classified=classified,
-                downloaded_attachments=downloaded_attachments,
-                attachment_urls=attachment_urls,
+                parsed_task=parsed_task,
+                prompt=prompt,
+                dimensions=dimensions,
+                generation_urls=generation_urls,
+                generation_bytes=generation_bytes,
+                context_bytes=context_bytes,
+                logo_bytes=logo_images[0][1] if logo_images else None,
+                brand_aesthetic=brand_aesthetic,
                 orchestrator=orchestrator,
                 clickup=clickup,
             )
@@ -840,6 +864,192 @@ async def _handle_simple_edit_result(result, task_id: str, clickup):
             "Task requires human review",
             extra={"task_id": task_id, "status": result.status}
         )
+
+
+async def _process_branded_creative_v2(
+    task_id: str,
+    parsed_task: ParsedTask,
+    prompt: str,
+    dimensions: List[str],
+    generation_urls: List[str],
+    generation_bytes: List[bytes],
+    context_bytes: List[bytes],
+    logo_bytes: Optional[bytes],
+    brand_aesthetic: Optional[dict],
+    orchestrator,
+    clickup,
+):
+    """
+    Process BRANDED_CREATIVE task with dimension loop.
+    
+    V3.0: Uses parsed task data instead of classifier.
+    """
+    config = get_config()
+    results = []
+    
+    logger.info(
+        "_process_branded_creative_v2 called",
+        extra={
+            "task_id": task_id,
+            "dimensions": dimensions,
+            "generation_count": len(generation_urls),
+            "context_count": len(context_bytes),
+            "has_logo": logo_bytes is not None,
+            "has_brand_aesthetic": brand_aesthetic is not None,
+        }
+    )
+    
+    if not generation_urls:
+        await clickup.update_task_status(
+            task_id=task_id,
+            status="blocked",
+            comment="❌ **No images to include**\n\nNo main images provided."
+        )
+        return
+    
+    # Loop through dimensions
+    for i, dimension in enumerate(dimensions):
+        logger.info(
+            f"Processing dimension {i + 1}/{len(dimensions)}: {dimension}",
+            extra={"task_id": task_id, "dimension": dimension}
+        )
+        
+        try:
+            if i == 0:
+                # First dimension: use original attachments
+                gen_prompt = _build_branded_prompt_v2(parsed_task, dimension, brand_aesthetic)
+                image_url = generation_urls[0]
+                image_bytes = generation_bytes[0]
+                additional_urls = generation_urls[1:] if len(generation_urls) > 1 else None
+                additional_bytes = generation_bytes[1:] if len(generation_bytes) > 1 else None
+                ctx_bytes = context_bytes
+            else:
+                # Subsequent dimensions: adapt from previous result
+                gen_prompt = _build_adapt_prompt_v2(dimension)
+                image_url = results[-1].final_image.temp_url
+                image_bytes = results[-1].final_image.image_bytes
+                additional_urls = None
+                additional_bytes = None
+                ctx_bytes = None
+            
+            result = await orchestrator.process_with_iterations(
+                task_id=task_id,
+                prompt=gen_prompt,
+                original_image_url=image_url,
+                original_image_bytes=image_bytes,
+                task_type="BRANDED_CREATIVE",
+                additional_image_urls=additional_urls,
+                additional_image_bytes=additional_bytes,
+                context_image_bytes=ctx_bytes,
+            )
+            
+            if result.status == "success":
+                results.append(result)
+                logger.info(
+                    f"Dimension {dimension} complete",
+                    extra={
+                        "task_id": task_id,
+                        "model": result.final_image.model_name,
+                    }
+                )
+            else:
+                logger.warning(
+                    f"Dimension {dimension} failed",
+                    extra={"task_id": task_id}
+                )
+        
+        except Exception as e:
+            logger.error(
+                f"Dimension {dimension} error: {e}",
+                extra={"task_id": task_id, "dimension": dimension}
+            )
+    
+    # Upload results
+    if results:
+        for i, result in enumerate(results):
+            dim_label = dimensions[i].replace(":", "x")
+            
+            await clickup.upload_attachment(
+                task_id=task_id,
+                image_bytes=result.final_image.image_bytes,
+                filename=f"edited_{task_id}_{dim_label}.png",
+            )
+        
+        dims_done = [dimensions[i] for i in range(len(results))]
+        dims_failed = [d for d in dimensions if d not in dims_done]
+        
+        status_msg = f"✅ **Creative completed!**\n\n"
+        status_msg += f"**Dimensions:** {', '.join(dims_done)}\n"
+        
+        if dims_failed:
+            status_msg += f"**Failed:** {', '.join(dims_failed)}\n"
+        
+        status_msg += f"**Model:** {results[0].model_used}"
+        
+        await clickup.update_task_status(
+            task_id=task_id,
+            status=config.clickup_status_complete,
+            comment=status_msg,
+        )
+    else:
+        await clickup.update_task_status(
+            task_id=task_id,
+            status="blocked",
+            comment="❌ **All dimensions failed**\n\nNo successful outputs generated."
+        )
+
+
+def _build_branded_prompt_v2(parsed_task: ParsedTask, dimension: str, brand_aesthetic: Optional[dict] = None) -> str:
+    """Build prompt for branded creative generation from parsed task."""
+    parts = []
+    
+    # Dimension with framing principle
+    if dimension:
+        parts.append(f"Create a {dimension} marketing graphic.")
+        parts.append("""
+Professional marketing graphics fill the entire canvas edge-to-edge.
+Empty borders, padding, or letterboxing indicate technical failure, not intentional design.
+When adapting to an aspect ratio: expand flexible elements (backgrounds, negative space) to fill the frame - never compress content or add empty bands.""")
+    else:
+        parts.append("Create a marketing graphic.")
+    
+    # Main text
+    if parsed_task.main_text:
+        parts.append(f"\nPrimary text: \"{parsed_task.main_text}\"")
+    
+    # Secondary text
+    if parsed_task.secondary_text:
+        parts.append(f"Secondary text: \"{parsed_task.secondary_text}\"")
+    
+    # Font
+    if parsed_task.font:
+        parts.append(f"\nFont: {parsed_task.font}")
+    
+    # Style direction
+    if parsed_task.style_direction:
+        parts.append(f"\nStyle direction: {parsed_task.style_direction}")
+    
+    # Extra notes
+    if parsed_task.extra_notes:
+        parts.append(f"\nAdditional instructions: {parsed_task.extra_notes}")
+    
+    # Reference images context
+    if parsed_task.reference_images:
+        parts.append(f"\nReference images provided for style/layout guidance.")
+    
+    # Brand aesthetic
+    if brand_aesthetic:
+        guidance = brand_aesthetic.get("prompt_guidance")
+        if guidance:
+            parts.append(f"\nBrand guidance: {guidance}")
+    
+    return "\n".join(parts)
+
+
+def _build_adapt_prompt_v2(dimension: str) -> str:
+    """Build adaptation prompt for subsequent dimensions."""
+    return f"""Recreate this exact image in {dimension} format.
+Keep everything identical"""
 
 
 async def _process_branded_creative(
