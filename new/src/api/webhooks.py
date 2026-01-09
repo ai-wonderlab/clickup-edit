@@ -922,7 +922,7 @@ async def _process_branded_creative_v2(
                 ctx_bytes = context_bytes
             else:
                 # Subsequent dimensions: adapt from previous result
-                gen_prompt = _build_adapt_prompt_v2(dimension)
+                gen_prompt = _build_adapt_prompt_v2()
                 image_url = results[-1].final_image.temp_url
                 image_bytes = results[-1].final_image.image_bytes
                 additional_urls = None
@@ -1096,10 +1096,9 @@ When adapting to an aspect ratio: expand flexible elements (backgrounds, negativ
     return "\n".join(parts)
 
 
-def _build_adapt_prompt_v2(dimension: str) -> str:
+def _build_adapt_prompt_v2() -> str:
     """Build adaptation prompt for subsequent dimensions."""
-    return f"""Recreate this exact image in {dimension} format.
-Keep everything exactly the same. Do not change anything."""
+    return "Recreate this exact image. Keep everything exactly the same. Do not change anything."
 
 
 async def _process_branded_creative(
