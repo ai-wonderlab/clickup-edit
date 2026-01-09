@@ -155,39 +155,6 @@ CRITICAL VALIDATION CHECKS
    ✓ No unwanted color changes
    ✓ No unwanted additions or deletions
 
-───────────────────────────────────────────────────────────────
-
-7. SUBJECT INTEGRITY & PRESERVATION CHECK ⚠️ CRITICAL
-
-   HUMAN SUBJECT COMPLETENESS:
-   ✓ Head fully visible (no cut-off foreheads, hair, or top of head)
-   ✓ Face intact and complete
-   ✓ No unnatural body cropping
-   ✓ Subject framing makes sense (not awkwardly cut)
-   
-   BACKGROUND EXTENSION QUALITY:
-   ✓ No visible seams where background was extended
-   ✓ No color/texture discontinuities at canvas edges
-   ✓ Extended background matches original seamlessly
-   ✓ No repeated patterns or obvious clone artifacts
-   
-   PRESERVATION COMPLIANCE (when user requests it):
-   Look for phrases like:
-   - "keep image unchanged" / "keep exactly as given"
-   - "κράτα τις εικόνες ακριβώς" / "μην τις αλλάξεις"
-   - "preserve the photo" / "don't modify"
-   
-   If such instruction exists:
-   ✓ Subject MUST remain exactly as in input (same framing)
-   ✓ Only BACKGROUND can be extended to fit new dimensions
-   ✓ Subject cannot be cropped, zoomed, or repositioned
-   
-   🚨 AUTOMATIC FAIL (score ≤3) if:
-   • Human subject's head/face is cut off or cropped
-   • User requested preservation BUT subject was cropped/altered
-   • Visible seams or edges from poor background extension
-   • Subject awkwardly cropped to fit aspect ratio instead of extending background
-
 ═══════════════════════════════════════════════════════════════
 COMPARISON PROTOCOL (FOLLOW THIS STEP BY STEP)
 ═══════════════════════════════════════════════════════════════
@@ -271,13 +238,7 @@ SCORING GUIDELINES
    • Logo distorted or missing
    • Text errors or unreadable
 
-3 = Critical preservation failures (FAIL)
-   • Human subject's head/face cut off
-   • User requested image preservation but subject was cropped
-   • Visible seams from background extension
-   • Subject awkwardly cropped to fit aspect ratio
-
-0-2 = Complete failure
+0-3 = Complete failure
     • Output unusable
     • Multiple catastrophic issues
 
@@ -340,10 +301,6 @@ FINAL CHECKLIST BEFORE RESPONDING
 ✓ Did I verify ALL input images are incorporated?
 ✓ Did I check text accuracy (especially Greek uppercase)?
 ✓ Did I examine logo quality (shape, clarity, colors)?
-✓ Did I check if any human subject has their HEAD FULLY VISIBLE (not cut off)?
-✓ Did I look for visible SEAMS from background extension?
-✓ If user requested "keep image unchanged" - is the subject EXACTLY as in input?
-✓ Was background EXTENDED (correct) vs subject CROPPED (wrong) for aspect ratio?
 ✓ Did I provide SPECIFIC observations in reasoning?
 
 Return ONLY valid JSON.

@@ -922,7 +922,7 @@ async def _process_branded_creative_v2(
                 ctx_bytes = context_bytes
             else:
                 # Subsequent dimensions: adapt from previous result
-                gen_prompt = _build_adapt_prompt_v2(dimension, parsed_task)
+                gen_prompt = _build_adapt_prompt_v2(dimension)
                 image_url = results[-1].final_image.temp_url
                 image_bytes = results[-1].final_image.image_bytes
                 additional_urls = None
@@ -1096,22 +1096,10 @@ When adapting to an aspect ratio: expand flexible elements (backgrounds, negativ
     return "\n".join(parts)
 
 
-def _build_adapt_prompt_v2(dimension: str, parsed_task: ParsedTask = None) -> str:
+def _build_adapt_prompt_v2(dimension: str) -> str:
     """Build adaptation prompt for subsequent dimensions."""
-    parts = [f"Recreate this exact image in {dimension} format."]
-    parts.append("Keep everything identical - same text, logo placement, composition, and subject positioning.")
-    parts.append("")
-    parts.append("CRITICAL RULES:")
-    parts.append("• Do NOT crop the subject (no cut-off heads, faces, or bodies)")
-    parts.append("• ONLY extend/modify the BACKGROUND to fit the new aspect ratio")
-    parts.append("• Preserve all text exactly as shown")
-    parts.append("• Preserve logo position and quality")
-    
-    # Include user's extra notes if they specified preservation instructions
-    if parsed_task and parsed_task.extra_notes:
-        parts.append(f"\nUser instructions: {parsed_task.extra_notes}")
-    
-    return "\n".join(parts)
+    return f"""Recreate this exact image in {dimension} format.
+Keep everything exactly the same. Do not change anything."""
 
 
 async def _process_branded_creative(
