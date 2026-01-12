@@ -426,15 +426,24 @@ Return ONLY JSON."""
                             max_dimension=2048,
                             quality=85
                         )
+                        # resize_for_context converts to JPEG
+                        media_type = "image/jpeg"
+                    else:
+                        # Detect original format
+                        from PIL import Image
+                        import io
+                        img = Image.open(io.BytesIO(original_bytes))
+                        media_type = "image/jpeg" if img.format == "JPEG" else "image/png"
+                    
                     original_b64 = base64.b64encode(original_bytes).decode('utf-8')
-                    original_data_url = f"data:image/png;base64,{original_b64}"
+                    original_data_url = f"data:{media_type};base64,{original_b64}"
                     user_content.append({
                         "type": "image_url",
                         "image_url": {
                             "url": original_data_url
                         }
                     })
-                    logger.info(f"📷 Added original image {i+1}/{num_originals} ({len(original_bytes)/1024:.1f}KB)")
+                    logger.info(f"📷 Added original image {i+1}/{num_originals} ({len(original_bytes)/1024:.1f}KB, {media_type})")
                 
                 logger.info("📥 Downloading edited image for validation")
                 async with httpx.AsyncClient(timeout=30.0) as download_client:
