@@ -390,6 +390,7 @@ class Orchestrator:
                         original_image_url,
                         original_image_bytes,  # ✅ ADD bytes for validation
                         validated,
+                        aspect_ratio,          # ✅ NEW: Pass aspect ratio
                     )
 
                     # ✅ CHECK IF REFINEMENT PRODUCED A PASSING RESULT

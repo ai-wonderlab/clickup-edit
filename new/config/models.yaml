@@ -19,10 +19,10 @@ image_models:
     provider: wavespeed
     priority: 1
     supports_greek: true
-  - name: nano-banana-pro-edit-ultra
-    provider: wavespeed
-    priority: 2
-    supports_greek: true
+  # - name: nano-banana-pro-edit-ultra
+  #   provider: wavespeed
+  #   priority: 2
+  #   supports_greek: true
 
 enhancement:
   model: anthropic/claude-sonnet-4.5

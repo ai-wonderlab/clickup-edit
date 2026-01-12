@@ -77,6 +77,7 @@ class Refiner:
         original_image_url: str,
         original_image_bytes: bytes,  # ✅ ADD for validation
         failed_validations: List[ValidationResult],
+        aspect_ratio: str = None,  # ✅ NEW: Aspect ratio for generation
     ) -> RefineResult:
         """
         Refine prompts based on validation feedback and regenerate.
@@ -86,6 +87,7 @@ class Refiner:
             original_image_url: URL of original image
             original_image_bytes: Original image bytes for validation
             failed_validations: List of failed validation results
+            aspect_ratio: Optional aspect ratio for WaveSpeed generation
             
         Returns:
             RefineResult with new generations and validations
@@ -124,7 +126,8 @@ class Refiner:
         
         generated = await self.generator.generate_all_parallel(
             enhanced,
-            [original_image_url]  # ← NEW: wrap in list for multi-image support
+            [original_image_url],  # ← NEW: wrap in list for multi-image support
+            aspect_ratio,          # ✅ NEW: Pass aspect ratio to WaveSpeed
         )
         
         validated = await self.validator.validate_all_parallel(
