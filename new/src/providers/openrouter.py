@@ -73,6 +73,7 @@ class OpenRouterClient(BaseProvider):
         deep_research: str,
         original_images_bytes: Optional[List[bytes]] = None,  # ✅ Multiple images
         cache_enabled: bool = True,
+        previous_feedback: Optional[str] = None,  # ✅ Feedback from previous iteration
     ) -> str:
         """Enhance user prompt using Claude with system/user split."""
         self._ensure_client()
@@ -94,6 +95,8 @@ class OpenRouterClient(BaseProvider):
                 "deep_research_length": len(deep_research),
                 "images_count": len(original_images_bytes) if original_images_bytes else 0,
                 "cache_enabled": cache_enabled,
+                "has_previous_feedback": previous_feedback is not None,
+                "previous_feedback": previous_feedback[:200] if previous_feedback else None,
             }
         )
         
@@ -161,7 +164,26 @@ Just the pure editing instructions."""
                         extra={"image_count": len(original_images_bytes)}
                     )
                 
-                user_text = f"""{multi_image_context}You are a TRANSLATOR, not a creative director.
+                # Add feedback section if this is a retry iteration
+                feedback_section = ""
+                if previous_feedback:
+                    feedback_section = f"""
+═══════════════════════════════════════════════════════════════
+⚠️ PREVIOUS ATTEMPT FEEDBACK (IMPORTANT - Address these issues):
+═══════════════════════════════════════════════════════════════
+{previous_feedback}
+
+Your enhanced prompt MUST specifically address these issues.
+Focus on fixing what went wrong in the previous attempt.
+═══════════════════════════════════════════════════════════════
+
+"""
+                    logger.info(
+                        "📝 FEEDBACK INJECTED INTO ENHANCEMENT PROMPT",
+                        extra={"feedback_length": len(previous_feedback)}
+                    )
+                
+                user_text = f"""{multi_image_context}{feedback_section}You are a TRANSLATOR, not a creative director.
 
 Your job:
 - Convert the user's request into precise technical instructions

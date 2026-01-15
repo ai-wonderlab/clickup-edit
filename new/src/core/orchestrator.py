@@ -179,6 +179,7 @@ class Orchestrator:
         current_prompt = prompt
         all_iterations: List[IterationMetrics] = []
         all_validation_results: List[ValidationResult] = []
+        previous_validation_feedback: Optional[str] = None  # Track feedback for enhancement retries
         
         for iteration in range(1, self.max_iterations + 1):
             iteration_start = time.time()
@@ -194,22 +195,23 @@ class Orchestrator:
             try:
                 # Phase 1: Parallel Enhancement - uses ALL images (including reference)
                 logger.info("Phase 1: Enhancement", extra={"iteration": iteration})
-                include_image = (iteration == 1)
-
+                
+                # Always include images - Claude needs context on every iteration
                 enhanced = await self.enhancer.enhance_all_parallel(
                     current_prompt,
-                    original_images_bytes=enhancement_bytes if include_image else None,  # ✅ ALL images
+                    original_images_bytes=enhancement_bytes,  # Always send images for context
+                    previous_feedback=previous_validation_feedback,  # Pass feedback from previous iteration
                 )
                 
-                if include_image:
-                    logger.info(
-                        "🖼️ Sent ALL images to Claude for context-aware enhancement",
-                        extra={
-                            "iteration": iteration,
-                            "num_images": len(enhancement_bytes),
-                            "includes_reference": context_image_bytes is not None,
-                        }
-                    )
+                logger.info(
+                    "🖼️ Sent ALL images to Claude for context-aware enhancement",
+                    extra={
+                        "iteration": iteration,
+                        "num_images": len(enhancement_bytes) if enhancement_bytes else 0,
+                        "includes_reference": context_image_bytes is not None,
+                        "has_previous_feedback": previous_validation_feedback is not None,
+                    }
+                )
                 
                 # Phase 2: Parallel Generation - uses ONLY include images (no reference)
                 logger.info("Phase 2: Generation", extra={"iteration": iteration})
@@ -232,6 +234,23 @@ class Orchestrator:
                     )
                     
                     all_validation_results.extend(validated)
+                    
+                    # Capture feedback for next iteration's enhancement
+                    failed_validations = [v for v in validated if not v.passed]
+                    if failed_validations:
+                        # Get the best failed result's issues for feedback
+                        best_failed = max(failed_validations, key=lambda v: v.score)
+                        previous_validation_feedback = (
+                            f"Previous attempt failed (score {best_failed.score}/10). "
+                            f"Issues: {', '.join(best_failed.issues)}"
+                        )
+                        logger.info(
+                            "📝 Captured validation feedback for next iteration",
+                            extra={
+                                "iteration": iteration,
+                                "feedback": previous_validation_feedback,
+                            }
+                        )
                     
                 except Exception as validation_error:
                     # ✅ NEW: Distinguish validation system errors from quality failures

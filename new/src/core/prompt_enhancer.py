@@ -69,6 +69,7 @@ class PromptEnhancer:
         original_prompt: str,
         model_name: str,
         original_images_bytes: Optional[List[bytes]] = None,  # ✅ Multiple images
+        previous_feedback: Optional[str] = None,  # ✅ Feedback from previous iteration
     ) -> EnhancedPrompt:
         """
         Enhance prompt for a single model.
@@ -77,6 +78,7 @@ class PromptEnhancer:
             original_prompt: User's original edit request
             model_name: Target image model name
             original_images_bytes: Optional list of image bytes for context
+            previous_feedback: Feedback from previous iteration's validation
             
         Returns:
             EnhancedPrompt
@@ -101,6 +103,7 @@ class PromptEnhancer:
                 deep_research=deep_research,
                 original_images_bytes=original_images_bytes,  # ✅ Pass all images
                 cache_enabled=True,
+                previous_feedback=previous_feedback,  # ✅ Pass feedback for retry context
             )
 
             logger.info(
@@ -138,6 +141,7 @@ class PromptEnhancer:
         self,
         original_prompt: str,
         original_images_bytes: Optional[List[bytes]] = None,  # ✅ Multiple images
+        previous_feedback: Optional[str] = None,  # ✅ Feedback from previous iteration
     ) -> List[EnhancedPrompt]:
         """
         Enhance prompt for ALL models in parallel.
@@ -145,6 +149,7 @@ class PromptEnhancer:
         Args:
             original_prompt: User's original edit request
             original_images_bytes: Optional list of image bytes for context
+            previous_feedback: Feedback from previous iteration's validation
             
         Returns:
             List of successful EnhancedPrompt objects
@@ -163,6 +168,7 @@ class PromptEnhancer:
                 original_prompt,
                 model_name,
                 original_images_bytes,
+                previous_feedback,  # ✅ Pass feedback to each model's enhancement
             )
             for model_name in self.model_names
         ]
