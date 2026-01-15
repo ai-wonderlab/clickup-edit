@@ -5,72 +5,15 @@ import { supabase, Parameter } from '@/lib/supabase';
 import { Save, RotateCcw, Info } from 'lucide-react';
 import Toast, { useToast } from '@/components/Toast';
 
-// All 8 configurable parameters
 const DEFAULT_PARAMETERS: Omit<Parameter, 'id'>[] = [
-  {
-    key: 'VALIDATION_PASS_THRESHOLD',
-    value: '8',
-    type: 'int',
-    min_value: 1,
-    max_value: 10,
-    updated_at: new Date().toISOString(),
-  },
-  {
-    key: 'MAX_ITERATIONS',
-    value: '3',
-    type: 'int',
-    min_value: 1,
-    max_value: 10,
-    updated_at: new Date().toISOString(),
-  },
-  {
-    key: 'MAX_STEP_ATTEMPTS',
-    value: '2',
-    type: 'int',
-    min_value: 1,
-    max_value: 5,
-    updated_at: new Date().toISOString(),
-  },
-  {
-    key: 'TIMEOUT_OPENROUTER_SECONDS',
-    value: '120',
-    type: 'float',
-    min_value: 30,
-    max_value: 600,
-    updated_at: new Date().toISOString(),
-  },
-  {
-    key: 'TIMEOUT_WAVESPEED_SECONDS',
-    value: '300',
-    type: 'float',
-    min_value: 60,
-    max_value: 900,
-    updated_at: new Date().toISOString(),
-  },
-  {
-    key: 'RATE_LIMIT_ENHANCEMENT',
-    value: '5',
-    type: 'int',
-    min_value: 1,
-    max_value: 20,
-    updated_at: new Date().toISOString(),
-  },
-  {
-    key: 'RATE_LIMIT_VALIDATION',
-    value: '3',
-    type: 'int',
-    min_value: 1,
-    max_value: 10,
-    updated_at: new Date().toISOString(),
-  },
-  {
-    key: 'VALIDATION_DELAY_SECONDS',
-    value: '2',
-    type: 'float',
-    min_value: 0,
-    max_value: 10,
-    updated_at: new Date().toISOString(),
-  },
+  { key: 'VALIDATION_PASS_THRESHOLD', value: '8', type: 'int', min_value: 1, max_value: 10, updated_at: '' },
+  { key: 'MAX_ITERATIONS', value: '3', type: 'int', min_value: 1, max_value: 10, updated_at: '' },
+  { key: 'MAX_STEP_ATTEMPTS', value: '2', type: 'int', min_value: 1, max_value: 5, updated_at: '' },
+  { key: 'TIMEOUT_OPENROUTER_SECONDS', value: '120', type: 'float', min_value: 30, max_value: 600, updated_at: '' },
+  { key: 'TIMEOUT_WAVESPEED_SECONDS', value: '300', type: 'float', min_value: 60, max_value: 900, updated_at: '' },
+  { key: 'RATE_LIMIT_ENHANCEMENT', value: '5', type: 'int', min_value: 1, max_value: 20, updated_at: '' },
+  { key: 'RATE_LIMIT_VALIDATION', value: '3', type: 'int', min_value: 1, max_value: 10, updated_at: '' },
+  { key: 'VALIDATION_DELAY_SECONDS', value: '2', type: 'float', min_value: 0, max_value: 10, updated_at: '' },
 ];
 
 const PARAMETER_DESCRIPTIONS: Record<string, string> = {
@@ -92,12 +35,15 @@ export default function Settings() {
   const { toasts, addToast, removeToast } = useToast();
 
   useEffect(() => {
+    console.log('[Settings] Component mounted');
     fetchParameters();
   }, []);
 
   const fetchParameters = async () => {
+    console.log('[Settings] Fetching parameters...');
+    
     if (!supabase) {
-      // Use defaults if no Supabase
+      console.warn('[Settings] Supabase not configured, using defaults');
       setParameters(DEFAULT_PARAMETERS.map((p, i) => ({ ...p, id: `default-${i}` })));
       addToast('info', 'Using default parameters (no database)');
       setLoading(false);
@@ -110,25 +56,37 @@ export default function Settings() {
         .select('*')
         .order('key');
 
-      if (error) throw error;
+      if (error) {
+        console.error('[Settings] Error fetching:', error);
+        throw error;
+      }
+
+      console.log('[Settings] Fetched from DB:', data?.length || 0);
 
       // Merge with defaults to ensure all 8 are present
       const merged = DEFAULT_PARAMETERS.map((def, i) => {
         const existing = data?.find((d) => d.key === def.key);
+        if (existing) {
+          console.log('[Settings] Found in DB:', def.key, '=', existing.value);
+        } else {
+          console.log('[Settings] Using default:', def.key, '=', def.value);
+        }
         return existing || { ...def, id: `default-${i}` };
       });
 
       setParameters(merged);
       addToast('success', `Loaded ${merged.length} parameters`);
     } catch (err) {
+      console.error('[Settings] Error:', err);
       addToast('error', 'Failed to load parameters');
-      console.error(err);
+      setParameters(DEFAULT_PARAMETERS.map((p, i) => ({ ...p, id: `default-${i}` })));
     } finally {
       setLoading(false);
     }
   };
 
   const handleChange = (key: string, value: string) => {
+    console.log('[Settings] Changed:', key, '=', value);
     setChanges((prev) => ({ ...prev, [key]: value }));
   };
 
@@ -137,6 +95,8 @@ export default function Settings() {
   };
 
   const handleSaveAll = async () => {
+    console.log('[Settings] Saving all changes:', changes);
+    
     if (!supabase || Object.keys(changes).length === 0) {
       addToast('info', 'No changes to save');
       return;
@@ -146,7 +106,9 @@ export default function Settings() {
     try {
       for (const [key, value] of Object.entries(changes)) {
         const param = parameters.find((p) => p.key === key);
+        
         if (param && !param.id.startsWith('default-')) {
+          console.log('[Settings] Updating existing:', key);
           const { error } = await supabase
             .from('parameters')
             .update({ value, updated_at: new Date().toISOString() })
@@ -154,7 +116,7 @@ export default function Settings() {
 
           if (error) throw error;
         } else {
-          // Insert new parameter
+          console.log('[Settings] Inserting new:', key);
           const def = DEFAULT_PARAMETERS.find((d) => d.key === key);
           const { error } = await supabase.from('parameters').insert({
             key,
@@ -168,18 +130,20 @@ export default function Settings() {
         }
       }
 
+      console.log('[Settings] Save successful');
       addToast('success', `Saved ${Object.keys(changes).length} parameter(s)`);
       setChanges({});
       fetchParameters();
     } catch (err) {
+      console.error('[Settings] Save error:', err);
       addToast('error', 'Failed to save parameters');
-      console.error(err);
     } finally {
       setSaving(false);
     }
   };
 
   const handleReset = () => {
+    console.log('[Settings] Resetting changes');
     setChanges({});
     addToast('info', 'Changes reset');
   };
@@ -199,7 +163,7 @@ export default function Settings() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Settings</h1>
-          <p className="text-gray-600 mt-1">Configure pipeline parameters</p>
+          <p className="text-gray-600 mt-1">Configure pipeline parameters ({parameters.length} total)</p>
         </div>
         <div className="flex items-center gap-2">
           {hasChanges && (
@@ -236,10 +200,10 @@ export default function Settings() {
         {parameters.map((param) => (
           <div
             key={param.key}
-            className={`p-4 border rounded-lg transition-all ${
+            className={`p-4 border rounded-lg bg-white transition-all ${
               changes[param.key] !== undefined
                 ? 'border-blue-300 bg-blue-50'
-                : 'border-gray-200 bg-white'
+                : 'border-gray-200'
             }`}
           >
             <div className="flex items-start justify-between mb-3">

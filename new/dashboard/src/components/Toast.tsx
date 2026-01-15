@@ -26,9 +26,10 @@ export default function Toast({ toasts, removeToast }: ToastProps) {
 
 function ToastItem({ toast, onClose }: { toast: ToastMessage; onClose: () => void }) {
   useEffect(() => {
+    console.log('[Toast] Showing:', toast.type, toast.message);
     const timer = setTimeout(onClose, 4000);
     return () => clearTimeout(timer);
-  }, [onClose]);
+  }, [onClose, toast]);
 
   const icons = {
     success: <CheckCircle className="w-5 h-5 text-green-500" />,
@@ -61,10 +62,12 @@ export function useToast() {
 
   const addToast = (type: ToastMessage['type'], message: string) => {
     const id = Date.now().toString();
+    console.log('[useToast] Adding toast:', type, message);
     setToasts((prev) => [...prev, { id, type, message }]);
   };
 
   const removeToast = (id: string) => {
+    console.log('[useToast] Removing toast:', id);
     setToasts((prev) => prev.filter((t) => t.id !== id));
   };
 

@@ -17,18 +17,22 @@ export default function PromptEditor({ prompt, onSave, onClose, saving }: Prompt
   const [hasChanges, setHasChanges] = useState(false);
 
   useEffect(() => {
+    console.log('[PromptEditor] Opened for:', prompt.prompt_id);
     setHasChanges(content !== prompt.content);
-  }, [content, prompt.content]);
+  }, [content, prompt.content, prompt.prompt_id]);
 
   const handleSave = () => {
+    console.log('[PromptEditor] Saving changes...');
     onSave({ ...prompt, content });
   };
 
   const handleReset = () => {
+    console.log('[PromptEditor] Resetting content');
     setContent(prompt.content);
   };
 
   const handleCopy = async () => {
+    console.log('[PromptEditor] Copying to clipboard');
     await navigator.clipboard.writeText(content);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
@@ -37,9 +41,13 @@ export default function PromptEditor({ prompt, onSave, onClose, saving }: Prompt
   // Close on Escape key
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape') {
+        console.log('[PromptEditor] Escape pressed, closing');
+        onClose();
+      }
       if (e.key === 's' && (e.metaKey || e.ctrlKey)) {
         e.preventDefault();
+        console.log('[PromptEditor] Cmd+S pressed, saving');
         handleSave();
       }
     };

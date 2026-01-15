@@ -8,6 +8,9 @@ let supabase: SupabaseClient | null = null;
 
 if (supabaseUrl && supabaseAnonKey) {
   supabase = createClient(supabaseUrl, supabaseAnonKey);
+  console.log('[Supabase] Client initialized');
+} else {
+  console.warn('[Supabase] Missing credentials - URL:', !!supabaseUrl, 'Key:', !!supabaseAnonKey);
 }
 
 export { supabase };
@@ -67,4 +70,3 @@ export interface PromptHistory {
   content: string;
   changed_at: string;
 }
-

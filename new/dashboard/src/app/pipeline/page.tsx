@@ -2,10 +2,9 @@
 
 import { useState, useEffect } from 'react';
 import { supabase, Prompt } from '@/lib/supabase';
-import PipelineBox from '@/components/PipelineBox';
 import PromptEditor from '@/components/PromptEditor';
 import Toast, { useToast } from '@/components/Toast';
-import { ChevronDown, ChevronRight, Save, RotateCcw } from 'lucide-react';
+import { ChevronDown, ChevronRight, RotateCcw } from 'lucide-react';
 
 interface PipelineStep {
   id: string;
@@ -56,11 +55,15 @@ export default function PipelinePage() {
   const { toasts, addToast, removeToast } = useToast();
 
   useEffect(() => {
+    console.log('[Pipeline] Component mounted');
     fetchPrompts();
   }, []);
 
   const fetchPrompts = async () => {
+    console.log('[Pipeline] Fetching prompts...');
+    
     if (!supabase) {
+      console.warn('[Pipeline] Supabase not configured');
       addToast('error', 'Supabase not configured');
       setLoading(false);
       return;
@@ -72,18 +75,24 @@ export default function PipelinePage() {
         .select('*')
         .order('prompt_id');
 
-      if (error) throw error;
+      if (error) {
+        console.error('[Pipeline] Error fetching prompts:', error);
+        throw error;
+      }
+      
+      console.log('[Pipeline] Fetched prompts:', data?.length || 0);
       setPrompts(data || []);
       addToast('info', `Loaded ${data?.length || 0} prompts`);
     } catch (err) {
+      console.error('[Pipeline] Error:', err);
       addToast('error', 'Failed to load prompts');
-      console.error(err);
     } finally {
       setLoading(false);
     }
   };
 
   const toggleStep = (stepId: string) => {
+    console.log('[Pipeline] Toggle step:', stepId);
     setExpandedSteps((prev) => {
       const next = new Set(prev);
       if (next.has(stepId)) {
@@ -100,23 +109,28 @@ export default function PipelinePage() {
   };
 
   const handlePromptSelect = (prompt: Prompt) => {
+    console.log('[Pipeline] Selected prompt:', prompt.prompt_id);
     setSelectedPrompt(prompt);
     addToast('info', `Editing ${prompt.prompt_id}: ${prompt.name}`);
   };
 
   const handlePromptSave = async (updatedPrompt: Prompt) => {
+    console.log('[Pipeline] Saving prompt:', updatedPrompt.prompt_id);
+    
     if (!supabase) return;
 
     setSaving(true);
     try {
       // Save to prompt_history first
+      console.log('[Pipeline] Adding to history...');
       await supabase.from('prompt_history').insert({
         prompt_id: updatedPrompt.prompt_id,
         content: updatedPrompt.content,
-        version: 1, // Could increment based on existing versions
+        version: 1,
       });
 
       // Update the prompt
+      console.log('[Pipeline] Updating prompt...');
       const { error } = await supabase
         .from('prompts')
         .update({
@@ -131,10 +145,11 @@ export default function PipelinePage() {
         prev.map((p) => (p.id === updatedPrompt.id ? updatedPrompt : p))
       );
       setSelectedPrompt(null);
+      console.log('[Pipeline] Save successful');
       addToast('success', `Saved ${updatedPrompt.prompt_id} successfully`);
     } catch (err) {
+      console.error('[Pipeline] Save error:', err);
       addToast('error', 'Failed to save prompt');
-      console.error(err);
     } finally {
       setSaving(false);
     }
@@ -167,7 +182,7 @@ export default function PipelinePage() {
       {/* Pipeline Flow */}
       <div className="space-y-4">
         {PIPELINE_STEPS.map((step, index) => (
-          <div key={step.id} className="border border-gray-200 rounded-lg overflow-hidden">
+          <div key={step.id} className="border border-gray-200 rounded-lg overflow-hidden bg-white">
             {/* Step Header - Clickable */}
             <button
               onClick={() => toggleStep(step.id)}
@@ -196,7 +211,7 @@ export default function PipelinePage() {
 
             {/* Expanded Content - Prompts */}
             {expandedSteps.has(step.id) && (
-              <div className="p-4 bg-white border-t border-gray-200">
+              <div className="p-4 border-t border-gray-200">
                 <div className="grid gap-3">
                   {getPromptsForStep(step.promptIds).length === 0 ? (
                     <p className="text-gray-500 text-sm py-4 text-center">
@@ -215,7 +230,7 @@ export default function PipelinePage() {
                               <span className="font-mono text-sm font-semibold text-blue-600">
                                 {prompt.prompt_id}
                               </span>
-                              <span className="font-medium text-gray-900 truncate">
+                              <span className="font-medium text-gray-900">
                                 {prompt.name}
                               </span>
                             </div>
@@ -243,8 +258,8 @@ export default function PipelinePage() {
           prompt={selectedPrompt}
           onSave={handlePromptSave}
           onClose={() => {
+            console.log('[Pipeline] Editor closed');
             setSelectedPrompt(null);
-            addToast('info', 'Editor closed without saving');
           }}
           saving={saving}
         />

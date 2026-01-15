@@ -17,11 +17,15 @@ export default function HistoryPage() {
   const { toasts, addToast, removeToast } = useToast();
 
   useEffect(() => {
+    console.log('[History] Component mounted');
     fetchHistory();
   }, []);
 
   const fetchHistory = async () => {
+    console.log('[History] Fetching history...');
+    
     if (!supabase) {
+      console.warn('[History] Supabase not configured');
       addToast('error', 'Supabase not configured');
       setLoading(false);
       return;
@@ -34,22 +38,29 @@ export default function HistoryPage() {
         .order('changed_at', { ascending: false })
         .limit(50);
 
-      if (error) throw error;
+      if (error) {
+        console.error('[History] Error:', error);
+        throw error;
+      }
+      
+      console.log('[History] Fetched:', data?.length || 0);
       setHistory(data || []);
       addToast('info', `Loaded ${data?.length || 0} history entries`);
     } catch (err) {
+      console.error('[History] Error:', err);
       addToast('error', 'Failed to load history');
-      console.error(err);
     } finally {
       setLoading(false);
     }
   };
 
   const toggleExpanded = (id: string) => {
+    console.log('[History] Toggle expanded:', id);
     setExpanded((prev) => ({ ...prev, [id]: !prev[id] }));
   };
 
   const handleCopy = async (content: string, id: string) => {
+    console.log('[History] Copying content for:', id);
     await navigator.clipboard.writeText(content);
     setCopiedId(id);
     addToast('success', 'Copied to clipboard');
@@ -57,6 +68,8 @@ export default function HistoryPage() {
   };
 
   const handleRestore = async (entry: PromptHistory) => {
+    console.log('[History] Restoring:', entry.prompt_id, 'version', entry.version);
+    
     if (!supabase) return;
 
     try {
@@ -69,10 +82,12 @@ export default function HistoryPage() {
         .eq('prompt_id', entry.prompt_id);
 
       if (error) throw error;
+      
+      console.log('[History] Restore successful');
       addToast('success', `Restored ${entry.prompt_id} to version ${entry.version}`);
     } catch (err) {
+      console.error('[History] Restore error:', err);
       addToast('error', 'Failed to restore prompt');
-      console.error(err);
     }
   };
 
@@ -112,9 +127,10 @@ export default function HistoryPage() {
       </div>
 
       {history.length === 0 ? (
-        <div className="text-center py-12 text-gray-500">
+        <div className="text-center py-12 text-gray-500 bg-white border border-gray-200 rounded-lg">
           <History className="w-12 h-12 mx-auto mb-4 opacity-50" />
           <p>No history entries found</p>
+          <p className="text-sm mt-1">Changes to prompts will appear here</p>
         </div>
       ) : (
         <div className="space-y-3">
@@ -139,7 +155,7 @@ export default function HistoryPage() {
                         Version {entry.version}
                       </span>
                     </div>
-                    <p className="text-sm text-gray-500 truncate mt-1 max-w-full">
+                    <p className="text-sm text-gray-500 truncate mt-1">
                       {entry.content.substring(0, 100)}...
                     </p>
                   </div>

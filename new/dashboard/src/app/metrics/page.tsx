@@ -3,127 +3,170 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import StatsCard from '@/components/StatsCard';
+import { BarChart3, TrendingUp, Clock, CheckCircle, XCircle, Zap } from 'lucide-react';
+import Toast, { useToast } from '@/components/Toast';
+
+interface Metrics {
+  totalTasks: number;
+  passedTasks: number;
+  failedTasks: number;
+  avgScore: number;
+  avgIterations: number;
+  avgDuration: number;
+  modelUsage: Record<string, number>;
+}
 
 export default function Metrics() {
-  const [metrics, setMetrics] = useState({
-    total: 0,
-    passed: 0,
-    failed: 0,
+  const [metrics, setMetrics] = useState<Metrics>({
+    totalTasks: 0,
+    passedTasks: 0,
+    failedTasks: 0,
     avgScore: 0,
+    avgIterations: 0,
     avgDuration: 0,
-    byModel: {} as Record<string, { count: number; avgScore: number }>,
+    modelUsage: {},
   });
   const [loading, setLoading] = useState(true);
+  const { toasts, addToast, removeToast } = useToast();
 
   useEffect(() => {
+    console.log('[Metrics] Component mounted');
     fetchMetrics();
   }, []);
 
-  async function fetchMetrics() {
+  const fetchMetrics = async () => {
+    console.log('[Metrics] Fetching metrics...');
+    
     if (!supabase) {
+      console.warn('[Metrics] Supabase not configured');
+      addToast('info', 'Using mock metrics (no database)');
       setLoading(false);
       return;
     }
-    
-    // Get task results
-    const { data: results } = await supabase
-      .from('task_results')
-      .select('score, passed, model_used');
 
-    // Get logs for duration
-    const { data: logs } = await supabase
-      .from('task_logs')
-      .select('duration_ms');
+    try {
+      const { data, error } = await supabase
+        .from('task_results')
+        .select('*');
 
-    if (results && results.length > 0) {
-      const passed = results.filter(r => r.passed).length;
-      const avgScore = results.reduce((sum, r) => sum + r.score, 0) / results.length;
-      
-      // Group by model
-      const byModel: Record<string, { count: number; totalScore: number }> = {};
-      results.forEach(r => {
-        if (!byModel[r.model_used]) {
-          byModel[r.model_used] = { count: 0, totalScore: 0 };
-        }
-        byModel[r.model_used].count++;
-        byModel[r.model_used].totalScore += r.score;
-      });
+      if (error) {
+        console.error('[Metrics] Error:', error);
+        throw error;
+      }
 
-      const modelStats = Object.fromEntries(
-        Object.entries(byModel).map(([model, data]) => [
-          model,
-          { count: data.count, avgScore: data.totalScore / data.count }
-        ])
-      );
+      console.log('[Metrics] Fetched results:', data?.length || 0);
 
-      setMetrics({
-        total: results.length,
-        passed,
-        failed: results.length - passed,
-        avgScore: Math.round(avgScore * 10) / 10,
-        avgDuration: logs ? Math.round(logs.reduce((sum, l) => sum + (l.duration_ms || 0), 0) / logs.length) : 0,
-        byModel: modelStats,
-      });
+      if (data && data.length > 0) {
+        const passed = data.filter((r) => r.passed).length;
+        const avgScore = data.reduce((acc, r) => acc + (r.score || 0), 0) / data.length;
+        const avgIterations = data.reduce((acc, r) => acc + (r.iterations || 0), 0) / data.length;
+
+        // Count model usage
+        const modelUsage: Record<string, number> = {};
+        data.forEach((r) => {
+          if (r.model_used) {
+            modelUsage[r.model_used] = (modelUsage[r.model_used] || 0) + 1;
+          }
+        });
+
+        const newMetrics = {
+          totalTasks: data.length,
+          passedTasks: passed,
+          failedTasks: data.length - passed,
+          avgScore: Math.round(avgScore * 10) / 10,
+          avgIterations: Math.round(avgIterations * 10) / 10,
+          avgDuration: 0,
+          modelUsage,
+        };
+
+        console.log('[Metrics] Calculated:', newMetrics);
+        setMetrics(newMetrics);
+      }
+
+      addToast('success', 'Metrics loaded');
+    } catch (err) {
+      console.error('[Metrics] Error:', err);
+      addToast('error', 'Failed to load metrics');
+    } finally {
+      setLoading(false);
     }
-    
-    setLoading(false);
-  }
+  };
 
   if (loading) {
-    return <div className="text-center py-8">Loading...</div>;
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+      </div>
+    );
   }
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-bold text-gray-900">Metrics</h1>
-        <p className="text-gray-500 mt-1">Analytics and performance insights</p>
+        <h1 className="text-2xl font-bold text-gray-900">Metrics</h1>
+        <p className="text-gray-600 mt-1">Pipeline performance analytics</p>
       </div>
 
       {/* Overview Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        <StatsCard title="Total Tasks" value={metrics.total} />
-        <StatsCard 
-          title="Pass Rate" 
-          value={`${metrics.total > 0 ? Math.round((metrics.passed / metrics.total) * 100) : 0}%`}
-          trend={metrics.passed / metrics.total >= 0.8 ? 'up' : 'down'}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <StatsCard
+          title="Total Tasks"
+          value={metrics.totalTasks}
+          icon={<BarChart3 className="w-5 h-5" />}
         />
-        <StatsCard title="Avg Score" value={metrics.avgScore} />
-        <StatsCard title="Avg Duration" value={`${Math.round(metrics.avgDuration / 1000)}s`} />
+        <StatsCard
+          title="Passed"
+          value={metrics.passedTasks}
+          icon={<CheckCircle className="w-5 h-5" />}
+          trend="up"
+        />
+        <StatsCard
+          title="Failed"
+          value={metrics.failedTasks}
+          icon={<XCircle className="w-5 h-5" />}
+          trend={metrics.failedTasks > 0 ? 'down' : undefined}
+        />
+        <StatsCard
+          title="Avg Score"
+          value={`${metrics.avgScore}/10`}
+          icon={<TrendingUp className="w-5 h-5" />}
+        />
+        <StatsCard
+          title="Avg Iterations"
+          value={metrics.avgIterations}
+          icon={<Zap className="w-5 h-5" />}
+        />
+        <StatsCard
+          title="Pass Rate"
+          value={`${metrics.totalTasks > 0 ? Math.round((metrics.passedTasks / metrics.totalTasks) * 100) : 0}%`}
+          icon={<Clock className="w-5 h-5" />}
+        />
       </div>
 
-      {/* Model Comparison */}
-      <div>
-        <h2 className="text-xl font-bold text-gray-900 mb-4">Model Performance</h2>
-        <div className="bg-white rounded-xl border p-6">
-          {Object.keys(metrics.byModel).length === 0 ? (
-            <div className="text-center text-gray-500 py-8">
-              No model data yet
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {Object.entries(metrics.byModel).map(([model, data]) => (
-                <div key={model} className="flex items-center gap-4">
-                  <span className="w-48 font-mono text-sm">{model}</span>
-                  <div className="flex-1 bg-gray-100 rounded-full h-4 overflow-hidden">
-                    <div 
-                      className="bg-blue-500 h-full"
-                      style={{ width: `${(data.avgScore / 10) * 100}%` }}
-                    />
-                  </div>
-                  <span className="w-20 text-right font-bold">
-                    {Math.round(data.avgScore * 10) / 10}/10
-                  </span>
-                  <span className="w-20 text-right text-gray-500">
-                    {data.count} tasks
-                  </span>
+      {/* Model Usage */}
+      {Object.keys(metrics.modelUsage).length > 0 && (
+        <div className="bg-white border border-gray-200 rounded-lg p-6">
+          <h2 className="text-lg font-semibold text-gray-900 mb-4">Model Usage</h2>
+          <div className="space-y-3">
+            {Object.entries(metrics.modelUsage).map(([model, count]) => (
+              <div key={model} className="flex items-center gap-4">
+                <span className="text-sm text-gray-600 w-48 truncate">{model}</span>
+                <div className="flex-1 bg-gray-200 rounded-full h-2">
+                  <div
+                    className="bg-blue-600 h-2 rounded-full"
+                    style={{
+                      width: `${(count / metrics.totalTasks) * 100}%`,
+                    }}
+                  />
                 </div>
-              ))}
-            </div>
-          )}
+                <span className="text-sm text-gray-500 w-16 text-right">{count} tasks</span>
+              </div>
+            ))}
+          </div>
         </div>
-      </div>
+      )}
+
+      <Toast toasts={toasts} removeToast={removeToast} />
     </div>
   );
 }
-
