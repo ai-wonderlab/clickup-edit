@@ -3,6 +3,8 @@
 from fastapi import APIRouter
 from datetime import datetime
 
+from ..utils.config_manager import config_manager
+
 router = APIRouter()
 
 
@@ -24,4 +26,19 @@ async def readiness_check():
     return {
         "ready": True,
         "timestamp": datetime.utcnow().isoformat() + "Z",
+    }
+
+
+@router.get("/detailed")
+async def health_detailed():
+    """Detailed health check with config source information."""
+    return {
+        "status": "healthy",
+        "timestamp": datetime.utcnow().isoformat() + "Z",
+        "service": "image-edit-agent",
+        "version": "1.0.0",
+        "supabase_connected": config_manager.is_supabase_connected,
+        "config_source": "supabase" if config_manager.is_supabase_connected else "yaml",
+        "active_models": config_manager.get_active_models(),
+        "prompts_loaded": len(config_manager.list_prompts()),
     }

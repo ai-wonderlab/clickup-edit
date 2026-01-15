@@ -18,6 +18,7 @@ from typing import Any, Dict, List, Optional
 import yaml
 
 from .logger import get_logger
+from .supabase_client import supabase_client
 
 logger = get_logger(__name__)
 
@@ -45,11 +46,17 @@ class ConfigManager:
         
         self._initialized = True
         self._config: Dict = {}
-        self._supabase_client = None  # Will be set by Batch 3
+        self._supabase = supabase_client  # Use global Supabase singleton
         self._yaml_path = Path(__file__).parent.parent.parent / "config" / "prompts.yaml"
         
         self._load_yaml()
-        logger.info("ConfigManager initialized", extra={"yaml_loaded": bool(self._config)})
+        logger.info(
+            "ConfigManager initialized",
+            extra={
+                "yaml_loaded": bool(self._config),
+                "supabase_connected": self._supabase.is_connected
+            }
+        )
     
     def _load_yaml(self) -> None:
         """Load configuration from YAML file."""
@@ -84,14 +91,11 @@ class ConfigManager:
         Example:
             get_prompt("P2", model_name="nano-banana-pro-edit", original_prompt="...")
         """
-        # Try Supabase first (will be implemented in Batch 3)
-        if self._supabase_client:
-            try:
-                result = self._supabase_client.get_prompt(prompt_id)
-                if result:
-                    return self._substitute_variables(result, variables)
-            except Exception as e:
-                logger.warning(f"Supabase fetch failed for {prompt_id}: {e}")
+        # Try Supabase first
+        if self._supabase.is_connected:
+            content = self._supabase.get_prompt(prompt_id)
+            if content:
+                return self._substitute_variables(content, variables)
         
         # Fallback to YAML
         prompts = self._config.get("prompts", {})
@@ -99,7 +103,7 @@ class ConfigManager:
         content = prompt_data.get("content", "")
         
         if not content:
-            logger.error(f"Prompt {prompt_id} not found in config")
+            logger.warning(f"Prompt {prompt_id} not found, using hardcoded fallback")
             return self._get_hardcoded_fallback(prompt_id, variables)
         
         return self._substitute_variables(content, variables)
@@ -195,13 +199,10 @@ Do NOT add borders or letterboxing.""",
             Parameter value with correct type
         """
         # Try Supabase first
-        if self._supabase_client:
-            try:
-                result = self._supabase_client.get_parameter(key)
-                if result is not None:
-                    return result
-            except Exception:
-                pass
+        if self._supabase.is_connected:
+            value = self._supabase.get_parameter(key)
+            if value is not None:
+                return value
         
         # Try YAML
         params = self._config.get("parameters", {})
@@ -274,6 +275,13 @@ Do NOT add borders or letterboxing.""",
     
     def get_active_models(self) -> List[str]:
         """Get list of active model names sorted by priority."""
+        # Try Supabase first
+        if self._supabase.is_connected:
+            models = self._supabase.get_active_models()
+            if models:
+                return models
+        
+        # Fallback to YAML
         models = self._config.get("models", [])
         active = [m for m in models if m.get("is_active", False)]
         active.sort(key=lambda m: m.get("priority", 99))
@@ -296,15 +304,10 @@ Do NOT add borders or letterboxing.""",
         model = self.get_model_config(model_name)
         return model.get("is_active", False) if model else False
     
-    def set_supabase_client(self, client) -> None:
-        """Set Supabase client for live config updates."""
-        self._supabase_client = client
-        logger.info("Supabase client connected to ConfigManager")
-    
     @property
     def is_supabase_connected(self) -> bool:
         """Check if Supabase is connected."""
-        return self._supabase_client is not None
+        return self._supabase.is_connected
     
     @property
     def config_path(self) -> Path:

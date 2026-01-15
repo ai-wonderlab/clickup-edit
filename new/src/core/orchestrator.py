@@ -20,6 +20,7 @@ from ..utils.logger import get_logger
 from ..utils.errors import AllEnhancementsFailed, AllGenerationsFailed
 from ..utils.config import Config
 from ..utils.config_manager import config_manager
+from ..utils.task_logger import task_logger
 
 logger = get_logger(__name__)
 
@@ -164,6 +165,18 @@ class Orchestrator:
             }
         )
         
+        # Log start of task processing
+        task_logger.log_phase(
+            task_id=task_id,
+            phase="start",
+            input_data={
+                "prompt": prompt[:500] if prompt else None,
+                "image_count": len(context_image_bytes) if context_image_bytes else 1,
+                "task_type": task_type,
+                "aspect_ratio": aspect_ratio,
+            }
+        )
+        
         # Build image lists for GENERATION (WaveSpeed)
         generation_urls = [original_image_url]
         if additional_image_urls:
@@ -215,6 +228,16 @@ class Orchestrator:
                     }
                 )
                 
+                # Log enhancement phase
+                task_logger.log_phase(
+                    task_id=task_id,
+                    phase="enhancement",
+                    iteration=iteration,
+                    input_data={"prompt_length": len(current_prompt)},
+                    output_data={"enhanced_count": len(enhanced)},
+                    success=len(enhanced) > 0
+                )
+                
                 # Phase 2: Parallel Generation - uses ONLY include images (no reference)
                 logger.info("Phase 2: Generation", extra={"iteration": iteration})
                 
@@ -222,6 +245,16 @@ class Orchestrator:
                     enhanced,
                     generation_urls,  # ✅ Only images to include in output
                     aspect_ratio,     # ✅ NEW: Pass aspect ratio to WaveSpeed
+                )
+                
+                # Log generation phase
+                task_logger.log_phase(
+                    task_id=task_id,
+                    phase="generation",
+                    iteration=iteration,
+                    model_used=generated[0].model_name if generated else None,
+                    output_data={"generated_count": len(generated)},
+                    success=len(generated) > 0
                 )
                 
                 # Phase 3: Parallel Validation
@@ -236,6 +269,19 @@ class Orchestrator:
                     )
                     
                     all_validation_results.extend(validated)
+                    
+                    # Log validation phase
+                    best_score = max((v.score for v in validated), default=0)
+                    task_logger.log_phase(
+                        task_id=task_id,
+                        phase="validation",
+                        iteration=iteration,
+                        output_data={
+                            "best_score": best_score,
+                            "passed_count": sum(1 for v in validated if v.passed)
+                        },
+                        success=any(v.passed for v in validated)
+                    )
                     
                     # Capture feedback for next iteration's enhancement
                     failed_validations = [v for v in validated if not v.passed]
@@ -338,6 +384,21 @@ class Orchestrator:
                             "model_used": best_result.model_name,
                             "processing_time_seconds": processing_time,
                         }
+                    )
+                    
+                    # Log final success result
+                    best_validation = next(
+                        (v for v in validated if v.model_name == best_result.model_name),
+                        None
+                    )
+                    task_logger.log_result(
+                        task_id=task_id,
+                        clickup_task_id=task_id,
+                        request=prompt[:500] if prompt else "",
+                        score=best_validation.score if best_validation else 0,
+                        passed=True,
+                        model_used=best_result.model_name,
+                        iterations=iteration
                     )
                     
                     return ProcessResult(
@@ -521,6 +582,14 @@ class Orchestrator:
                 "iterations": self.max_iterations,
                 "processing_time_seconds": processing_time,
             }
+        )
+        
+        # Log fallback phase
+        task_logger.log_phase(
+            task_id=task_id,
+            phase="fallback",
+            output_data={"reason": "max_iterations_exceeded"},
+            success=False
         )
         
         await self.hybrid_fallback.trigger_human_review(
