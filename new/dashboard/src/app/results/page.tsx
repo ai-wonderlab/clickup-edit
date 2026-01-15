@@ -1,15 +1,17 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { supabase, TaskResult, TaskLog } from '@/lib/supabase';
+import { supabase, TaskResult } from '@/lib/supabase';
 import ResultCard from '@/components/ResultCard';
-import { RotateCcw, Filter } from 'lucide-react';
+import TaskDetailModal from '@/components/TaskDetailModal';
+import { RotateCcw } from 'lucide-react';
 import Toast, { useToast } from '@/components/Toast';
 
 export default function Results() {
   const [results, setResults] = useState<TaskResult[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<'all' | 'passed' | 'failed'>('all');
+  const [selectedResult, setSelectedResult] = useState<TaskResult | null>(null);
   const { toasts, addToast, removeToast } = useToast();
 
   useEffect(() => {
@@ -56,6 +58,11 @@ export default function Results() {
     return true;
   });
 
+  const handleResultClick = (result: TaskResult) => {
+    console.log('[Results] Clicked result:', result.task_id);
+    setSelectedResult(result);
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -69,7 +76,7 @@ export default function Results() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Results</h1>
-          <p className="text-gray-600 mt-1">View all task processing results</p>
+          <p className="text-gray-600 mt-1">Click on a result to view full processing history</p>
         </div>
         <div className="flex items-center gap-2">
           <select
@@ -101,9 +108,24 @@ export default function Results() {
       ) : (
         <div className="space-y-3">
           {filteredResults.map((result) => (
-            <ResultCard key={result.id} result={result} />
+            <ResultCard 
+              key={result.id} 
+              result={result} 
+              onClick={() => handleResultClick(result)}
+            />
           ))}
         </div>
+      )}
+
+      {/* Task Detail Modal */}
+      {selectedResult && (
+        <TaskDetailModal
+          result={selectedResult}
+          onClose={() => {
+            console.log('[Results] Closing detail modal');
+            setSelectedResult(null);
+          }}
+        />
       )}
 
       <Toast toasts={toasts} removeToast={removeToast} />

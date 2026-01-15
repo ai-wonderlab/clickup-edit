@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { supabase, TaskResult } from '@/lib/supabase';
 import StatsCard from '@/components/StatsCard';
 import ResultCard from '@/components/ResultCard';
+import TaskDetailModal from '@/components/TaskDetailModal';
 import { Activity, CheckCircle, Clock, TrendingUp } from 'lucide-react';
 
 interface Stats {
@@ -22,6 +23,7 @@ export default function Dashboard() {
   });
   const [recentResults, setRecentResults] = useState<TaskResult[]>([]);
   const [loading, setLoading] = useState(true);
+  const [selectedResult, setSelectedResult] = useState<TaskResult | null>(null);
 
   useEffect(() => {
     console.log('[Dashboard] Component mounted');
@@ -82,6 +84,11 @@ export default function Dashboard() {
     }
   };
 
+  const handleResultClick = (result: TaskResult) => {
+    console.log('[Dashboard] Clicked result:', result.task_id);
+    setSelectedResult(result);
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -127,6 +134,7 @@ export default function Dashboard() {
       {/* Recent Results */}
       <div>
         <h2 className="text-lg font-semibold text-gray-900 mb-4">Recent Results</h2>
+        <p className="text-sm text-gray-500 mb-4">Click on a result to view full processing history</p>
         {recentResults.length === 0 ? (
           <div className="bg-white border border-gray-200 rounded-lg p-8 text-center text-gray-500">
             No results yet. Tasks will appear here when processed.
@@ -134,11 +142,26 @@ export default function Dashboard() {
         ) : (
           <div className="space-y-3">
             {recentResults.map((result) => (
-              <ResultCard key={result.id} result={result} />
+              <ResultCard 
+                key={result.id} 
+                result={result}
+                onClick={() => handleResultClick(result)}
+              />
             ))}
           </div>
         )}
       </div>
+
+      {/* Task Detail Modal */}
+      {selectedResult && (
+        <TaskDetailModal
+          result={selectedResult}
+          onClose={() => {
+            console.log('[Dashboard] Closing detail modal');
+            setSelectedResult(null);
+          }}
+        />
+      )}
     </div>
   );
 }

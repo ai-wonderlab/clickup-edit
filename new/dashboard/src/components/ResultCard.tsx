@@ -1,13 +1,14 @@
 'use client';
 
 import { TaskResult } from '@/lib/supabase';
-import { CheckCircle, XCircle, Clock, ThumbsUp, ThumbsDown } from 'lucide-react';
+import { CheckCircle, XCircle, Clock, ThumbsUp, ThumbsDown, ChevronRight } from 'lucide-react';
 
 interface ResultCardProps {
   result: TaskResult;
+  onClick?: () => void;
 }
 
-export default function ResultCard({ result }: ResultCardProps) {
+export default function ResultCard({ result, onClick }: ResultCardProps) {
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr);
     return date.toLocaleDateString('en-US', {
@@ -19,7 +20,12 @@ export default function ResultCard({ result }: ResultCardProps) {
   };
 
   return (
-    <div className="bg-white border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
+    <div 
+      onClick={onClick}
+      className={`bg-white border border-gray-200 rounded-lg p-4 transition-all ${
+        onClick ? 'hover:shadow-md hover:border-blue-300 cursor-pointer' : ''
+      }`}
+    >
       <div className="flex items-start justify-between gap-4">
         <div className="flex items-start gap-3 min-w-0 flex-1">
           <div className="mt-0.5">
@@ -62,6 +68,7 @@ export default function ResultCard({ result }: ResultCardProps) {
         <div className="flex items-center gap-2 text-xs text-gray-400 flex-shrink-0">
           <Clock className="w-4 h-4" />
           {formatDate(result.created_at)}
+          {onClick && <ChevronRight className="w-4 h-4 ml-2" />}
         </div>
       </div>
     </div>
