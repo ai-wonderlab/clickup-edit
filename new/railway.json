@@ -1,8 +1,4 @@
 {
-  "build": {
-    "builder": "NIXPACKS",
-    "buildCommand": "pip install -r new/requirements.txt"
-  },
   "deploy": {
     "startCommand": "cd new && uvicorn src.main:app --host 0.0.0.0 --port $PORT",
     "restartPolicyType": "ON_FAILURE",
