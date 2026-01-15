@@ -4,7 +4,8 @@ import { useState, useEffect } from 'react';
 import { supabase, TaskResult, TaskLog } from '@/lib/supabase';
 import { 
   X, Clock, CheckCircle, XCircle, ChevronDown, ChevronRight,
-  Sparkles, Image, Eye, RotateCcw, AlertTriangle, ThumbsUp, ThumbsDown
+  Sparkles, Image, Eye, RotateCcw, AlertTriangle, ThumbsUp, ThumbsDown,
+  Copy, Check, MessageSquare
 } from 'lucide-react';
 
 interface TaskDetailModalProps {
@@ -33,6 +34,114 @@ const PHASE_COLORS: Record<string, string> = {
   start: 'bg-indigo-100 text-indigo-700 border-indigo-200',
   end: 'bg-emerald-100 text-emerald-700 border-emerald-200',
 };
+
+// Sub-component for enhanced prompts
+function EnhancedPromptDisplay({ llmResponses }: { llmResponses: any[] }) {
+  const [copiedIdx, setCopiedIdx] = useState<number | null>(null);
+
+  const handleCopy = async (text: string, idx: number) => {
+    await navigator.clipboard.writeText(text);
+    setCopiedIdx(idx);
+    setTimeout(() => setCopiedIdx(null), 2000);
+  };
+
+  if (!llmResponses || llmResponses.length === 0) return null;
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-2 text-purple-700">
+        <MessageSquare className="w-4 h-4" />
+        <span className="text-sm font-semibold">🤖 LLM Enhanced Prompts</span>
+      </div>
+      {llmResponses.map((resp: any, idx: number) => (
+        <div key={idx} className="border border-purple-200 rounded-lg overflow-hidden">
+          <div className="flex items-center justify-between px-3 py-2 bg-purple-50">
+            <span className="text-xs font-medium text-purple-700">
+              Model: {resp.model}
+            </span>
+            <button
+              onClick={() => handleCopy(resp.enhanced_prompt, idx)}
+              className="flex items-center gap-1 text-xs text-purple-600 hover:text-purple-800"
+            >
+              {copiedIdx === idx ? (
+                <><Check className="w-3 h-3" /> Copied</>
+              ) : (
+                <><Copy className="w-3 h-3" /> Copy</>
+              )}
+            </button>
+          </div>
+          <pre className="p-3 text-xs font-mono whitespace-pre-wrap bg-white max-h-64 overflow-y-auto">
+            {resp.enhanced_prompt}
+          </pre>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// Sub-component for validation results
+function ValidationResultsDisplay({ validationResults }: { validationResults: any[] }) {
+  if (!validationResults || validationResults.length === 0) return null;
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-2 text-green-700">
+        <Eye className="w-4 h-4" />
+        <span className="text-sm font-semibold">🔍 Validation Results</span>
+      </div>
+      {validationResults.map((v: any, idx: number) => (
+        <div 
+          key={idx} 
+          className={`border rounded-lg overflow-hidden ${
+            v.passed ? 'border-green-200' : 'border-red-200'
+          }`}
+        >
+          <div className={`flex items-center justify-between px-3 py-2 ${
+            v.passed ? 'bg-green-50' : 'bg-red-50'
+          }`}>
+            <div className="flex items-center gap-3">
+              <span className="text-xs font-medium text-gray-700">
+                {v.model}
+              </span>
+              <span className={`px-2 py-0.5 rounded text-xs font-bold ${
+                v.passed 
+                  ? 'bg-green-200 text-green-800' 
+                  : 'bg-red-200 text-red-800'
+              }`}>
+                {v.passed ? '✓ PASS' : '✗ FAIL'}
+              </span>
+              <span className="text-lg font-bold">
+                {v.score}/10
+              </span>
+            </div>
+          </div>
+          
+          {/* Issues */}
+          {v.issues && v.issues.length > 0 && (
+            <div className="px-3 py-2 border-t border-gray-100">
+              <p className="text-xs font-semibold text-red-600 mb-1">Issues:</p>
+              <ul className="list-disc list-inside text-xs text-red-500 space-y-0.5">
+                {v.issues.map((issue: string, i: number) => (
+                  <li key={i}>{issue}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+          
+          {/* Reasoning */}
+          {v.reasoning && (
+            <div className="px-3 py-2 border-t border-gray-100 bg-gray-50">
+              <p className="text-xs font-semibold text-gray-600 mb-1">Full Reasoning:</p>
+              <pre className="text-xs font-mono whitespace-pre-wrap text-gray-600 max-h-48 overflow-y-auto">
+                {v.reasoning}
+              </pre>
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
 
 export default function TaskDetailModal({ result, onClose }: TaskDetailModalProps) {
   const [logs, setLogs] = useState<TaskLog[]>([]);
@@ -108,16 +217,96 @@ export default function TaskDetailModal({ result, onClose }: TaskDetailModalProp
     if (!data) return 'null';
     try {
       if (typeof data === 'string') {
-        // Truncate long strings
-        if (data.length > 500) {
-          return data.substring(0, 500) + '...';
-        }
         return data;
       }
       return JSON.stringify(data, null, 2);
     } catch {
       return String(data);
     }
+  };
+
+  // Render expanded content based on phase type
+  const renderExpandedContent = (log: TaskLog) => {
+    const output = log.output as any;
+    const input = log.input as any;
+
+    return (
+      <div className="p-4 border-t border-gray-200 space-y-4">
+        {/* Error */}
+        {log.error && (
+          <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
+            <p className="text-sm font-medium text-red-700 mb-1">Error</p>
+            <p className="text-sm text-red-600 font-mono">{log.error}</p>
+          </div>
+        )}
+
+        {/* Enhanced Prompts (for enhancement phase) */}
+        {log.phase === 'enhancement' && output?.llm_responses && (
+          <EnhancedPromptDisplay llmResponses={output.llm_responses} />
+        )}
+
+        {/* Validation Results (for validation phase) */}
+        {log.phase === 'validation' && output?.validation_results && (
+          <ValidationResultsDisplay validationResults={output.validation_results} />
+        )}
+
+        {/* Original Prompt (for enhancement phase) */}
+        {log.phase === 'enhancement' && input?.original_prompt && (
+          <div>
+            <p className="text-sm font-medium text-gray-700 mb-2">📝 Original Prompt</p>
+            <pre className="p-3 bg-gray-50 border border-gray-200 rounded-lg text-xs font-mono whitespace-pre-wrap max-h-32 overflow-y-auto">
+              {input.original_prompt}
+            </pre>
+          </div>
+        )}
+
+        {/* Generic Input (for other phases) */}
+        {log.input && log.phase !== 'enhancement' && (
+          <div>
+            <p className="text-sm font-medium text-gray-700 mb-2">Input</p>
+            <pre className="p-3 bg-gray-50 border border-gray-200 rounded-lg text-xs font-mono overflow-x-auto max-h-48 overflow-y-auto whitespace-pre-wrap">
+              {formatJson(log.input)}
+            </pre>
+          </div>
+        )}
+
+        {/* Generic Output (for phases without special handling) */}
+        {log.output && log.phase !== 'enhancement' && log.phase !== 'validation' && (
+          <div>
+            <p className="text-sm font-medium text-gray-700 mb-2">Output</p>
+            <pre className="p-3 bg-gray-50 border border-gray-200 rounded-lg text-xs font-mono overflow-x-auto max-h-48 overflow-y-auto whitespace-pre-wrap">
+              {formatJson(log.output)}
+            </pre>
+          </div>
+        )}
+
+        {/* Summary stats for enhancement */}
+        {log.phase === 'enhancement' && output && (
+          <div className="flex items-center gap-4 text-xs text-gray-500 pt-2 border-t">
+            <span>Enhanced: {output.enhanced_count} prompts</span>
+            {input?.image_count > 0 && <span>Images: {input.image_count}</span>}
+            {input?.has_previous_feedback && <span className="text-yellow-600">Has feedback from previous iteration</span>}
+          </div>
+        )}
+
+        {/* Summary stats for validation */}
+        {log.phase === 'validation' && output && (
+          <div className="flex items-center gap-4 text-xs text-gray-500 pt-2 border-t">
+            <span>Best Score: {output.best_score}/10</span>
+            <span>Passed: {output.passed_count}</span>
+          </div>
+        )}
+
+        {/* Summary stats for generation */}
+        {log.phase === 'generation' && output && (
+          <div className="flex items-center gap-4 text-xs text-gray-500">
+            <span>Generated: {output.generated_count} images</span>
+            {output.aspect_ratio && <span>Aspect: {output.aspect_ratio}</span>}
+            {output.models_used && <span>Models: {output.models_used.join(', ')}</span>}
+          </div>
+        )}
+      </div>
+    );
   };
 
   return (
@@ -248,37 +437,7 @@ export default function TaskDetailModal({ result, onClose }: TaskDetailModalProp
                         </div>
 
                         {/* Expanded content */}
-                        {isExpanded && (
-                          <div className="p-4 border-t border-gray-200 space-y-4">
-                            {/* Error */}
-                            {log.error && (
-                              <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
-                                <p className="text-sm font-medium text-red-700 mb-1">Error</p>
-                                <p className="text-sm text-red-600 font-mono">{log.error}</p>
-                              </div>
-                            )}
-
-                            {/* Input */}
-                            {log.input && (
-                              <div>
-                                <p className="text-sm font-medium text-gray-700 mb-2">Input</p>
-                                <pre className="p-3 bg-gray-50 border border-gray-200 rounded-lg text-xs font-mono overflow-x-auto max-h-48 overflow-y-auto whitespace-pre-wrap">
-                                  {formatJson(log.input)}
-                                </pre>
-                              </div>
-                            )}
-
-                            {/* Output */}
-                            {log.output && (
-                              <div>
-                                <p className="text-sm font-medium text-gray-700 mb-2">Output</p>
-                                <pre className="p-3 bg-gray-50 border border-gray-200 rounded-lg text-xs font-mono overflow-x-auto max-h-48 overflow-y-auto whitespace-pre-wrap">
-                                  {formatJson(log.output)}
-                                </pre>
-                              </div>
-                            )}
-                          </div>
-                        )}
+                        {isExpanded && renderExpandedContent(log)}
                       </div>
                     </div>
                   );
@@ -300,4 +459,3 @@ export default function TaskDetailModal({ result, onClose }: TaskDetailModalProp
     </div>
   );
 }
-

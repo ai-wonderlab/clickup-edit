@@ -228,13 +228,27 @@ class Orchestrator:
                     }
                 )
                 
-                # Log enhancement phase
+                # Log enhancement phase with FULL LLM OUTPUT
                 task_logger.log_phase(
                     task_id=task_id,
                     phase="enhancement",
                     iteration=iteration,
-                    input_data={"prompt_length": len(current_prompt)},
-                    output_data={"enhanced_count": len(enhanced)},
+                    model_used="claude-sonnet-4.5",
+                    input_data={
+                        "original_prompt": current_prompt,
+                        "has_previous_feedback": previous_validation_feedback is not None,
+                        "image_count": len(enhancement_bytes) if enhancement_bytes else 0,
+                    },
+                    output_data={
+                        "enhanced_count": len(enhanced),
+                        "llm_responses": [
+                            {
+                                "model": ep.model_name,
+                                "enhanced_prompt": ep.enhanced,
+                            }
+                            for ep in enhanced
+                        ]
+                    },
                     success=len(enhanced) > 0
                 )
                 
@@ -247,13 +261,17 @@ class Orchestrator:
                     aspect_ratio,     # ✅ NEW: Pass aspect ratio to WaveSpeed
                 )
                 
-                # Log generation phase
+                # Log generation phase with model details
                 task_logger.log_phase(
                     task_id=task_id,
                     phase="generation",
                     iteration=iteration,
                     model_used=generated[0].model_name if generated else None,
-                    output_data={"generated_count": len(generated)},
+                    output_data={
+                        "generated_count": len(generated),
+                        "models_used": [g.model_name for g in generated],
+                        "aspect_ratio": aspect_ratio,
+                    },
                     success=len(generated) > 0
                 )
                 
@@ -270,15 +288,26 @@ class Orchestrator:
                     
                     all_validation_results.extend(validated)
                     
-                    # Log validation phase
+                    # Log validation phase with FULL LLM OUTPUT
                     best_score = max((v.score for v in validated), default=0)
                     task_logger.log_phase(
                         task_id=task_id,
                         phase="validation",
                         iteration=iteration,
+                        model_used="claude-sonnet-4.5",
                         output_data={
                             "best_score": best_score,
-                            "passed_count": sum(1 for v in validated if v.passed)
+                            "passed_count": sum(1 for v in validated if v.passed),
+                            "validation_results": [
+                                {
+                                    "model": v.model_name,
+                                    "score": v.score,
+                                    "passed": v.passed,
+                                    "issues": v.issues,
+                                    "reasoning": v.reasoning,
+                                }
+                                for v in validated
+                            ]
                         },
                         success=any(v.passed for v in validated)
                     )
