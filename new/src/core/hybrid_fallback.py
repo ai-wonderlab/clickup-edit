@@ -5,6 +5,7 @@ from typing import List
 from ..providers.clickup import ClickUpClient
 from ..models.schemas import ValidationResult
 from ..utils.logger import get_logger
+from ..utils.config_manager import config_manager
 
 logger = get_logger(__name__)
 
@@ -75,34 +76,19 @@ class HybridFallback:
         # Format issues for human review
         issues_summary = self.format_issues(failed_results)
         
-        # Create detailed comment
-        comment = f"""🤖 **AI Agent - Hybrid Fallback Triggered**
-
-**Status:** Requires Human Review
-
-**Summary:**
-The AI agent attempted {iterations_attempted} iterations but could not produce an edit that meets quality standards.
-
-**Original Request:**
-```
-{original_prompt}
-```
-
-**Issues Detected:**
-{issues_summary}
-
-**Models Attempted:**
-{', '.join(set(r.model_name for r in failed_results))}
-
-**Next Steps:**
-1. Review the original request for clarity
-2. Check if requirements are feasible for automated editing
-3. Consider manual editing or revised requirements
-4. Update task status when resolved
-
----
-*Automated message from Image Edit Agent*
-"""
+        # LEGACY P14: Hybrid Fallback Comment - now from config
+        # """🤖 **AI Agent - Hybrid Fallback Triggered**
+        # **Status:** Requires Human Review...
+        # (full prompt moved to config/prompts.yaml)"""
+        
+        # Get comment template from config
+        comment = config_manager.get_prompt(
+            "P14",
+            iterations_attempted=iterations_attempted,
+            original_prompt=original_prompt,
+            issues_summary=issues_summary,
+            model_names=', '.join(set(r.model_name for r in failed_results))
+        )
         
         try:
             # Update task status

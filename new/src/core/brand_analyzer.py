@@ -8,6 +8,7 @@ from pathlib import Path
 
 from ..providers.openrouter import OpenRouterClient
 from ..utils.logger import get_logger
+from ..utils.config_manager import config_manager
 
 logger = get_logger(__name__)
 
@@ -143,19 +144,12 @@ class BrandAnalyzer:
         Returns:
             Raw JSON response string
         """
-        # Build user message
-        user_message = f"""Analyze this brand's website and extract their visual style guidelines.
-
-WEBSITE URL: {url}
-
-Please search/visit the website to understand their:
-- Visual style and mood
-- Typography patterns
-- Color usage
-- Layout preferences
-- How they present promotions/sales
-
-Then return the analysis in the JSON format specified."""
+        # LEGACY P9: Brand Analyzer User Message - now from config
+        # """Analyze this brand's website and extract their visual style guidelines...
+        # (full prompt moved to config/prompts.yaml)"""
+        
+        # Get brand analyzer user message from config
+        user_message = config_manager.get_prompt("P9", url=url)
 
         # Build messages
         messages = [

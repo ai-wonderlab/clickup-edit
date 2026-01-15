@@ -13,6 +13,7 @@ from ..utils.errors import ProviderError, AuthenticationError, RateLimitError
 from ..utils.retry import retry_async
 from ..utils.images import resize_for_context
 from ..utils.config import load_fonts_guide
+from ..utils.config_manager import config_manager
 from ..models.schemas import ValidationResult
 from ..models.enums import ValidationStatus
 
@@ -136,83 +137,71 @@ Use standard font names that image generation models understand.
                         extra={"fonts_length": len(fonts_guide)}
                     )
                 
-                system_prompt = deep_research + fonts_section + """
-
-═══════════════════════════════════════════════════════════════
-FINAL OUTPUT OVERRIDE:
-═══════════════════════════════════════════════════════════════
-Ignore any instructions above about warnings, recommendations, or alternatives.
-Output ONLY the enhanced prompt. No meta-commentary. No markdown headers.
-Just the pure editing instructions."""
+                # LEGACY P1: Enhancement System Suffix - now from config
+                # """
+                # ═══════════════════════════════════════════════════════════════
+                # FINAL OUTPUT OVERRIDE:
+                # ═══════════════════════════════════════════════════════════════
+                # Ignore any instructions above about warnings, recommendations, or alternatives.
+                # Output ONLY the enhanced prompt. No meta-commentary. No markdown headers.
+                # Just the pure editing instructions."""
+                
+                # Get system suffix from config
+                system_suffix = config_manager.get_prompt("P1")
+                system_prompt = deep_research + fonts_section + system_suffix
                 
                 # ═══════════════════════════════════════════════════════════
                 # USER PROMPT = Simple enhancement request + multi-image context
                 # ═══════════════════════════════════════════════════════════
                 
                 # Add multi-image context if multiple images
+                # LEGACY P3: Multi-Image Context - now from config
+                # """
+                # [MULTI-IMAGE INPUT]
+                # You are viewing {image_count} images.
+                # Each image's role and content is described in the request below.
+                # Use them according to their described purpose - do not assume which is "primary" or "secondary".
+                # """
                 multi_image_context = ""
                 if original_images_bytes and len(original_images_bytes) > 1:
-                    multi_image_context = f"""
-        [MULTI-IMAGE INPUT]
-        You are viewing {len(original_images_bytes)} images.
-        Each image's role and content is described in the request below.
-        Use them according to their described purpose - do not assume which is "primary" or "secondary".
-
-"""
+                    multi_image_context = config_manager.get_prompt(
+                        "P3",
+                        image_count=len(original_images_bytes)
+                    )
                     logger.info(
                         "🖼️ MULTI-IMAGE CONTEXT ADDED",
                         extra={"image_count": len(original_images_bytes)}
                     )
                 
                 # Add feedback section if this is a retry iteration
+                # LEGACY P15: Previous Feedback Section - now from config
                 feedback_section = ""
                 if previous_feedback:
-                    feedback_section = f"""
-═══════════════════════════════════════════════════════════════
-⚠️ PREVIOUS ATTEMPT FEEDBACK (IMPORTANT - Address these issues):
-═══════════════════════════════════════════════════════════════
-{previous_feedback}
-
-Your enhanced prompt MUST specifically address these issues.
-Focus on fixing what went wrong in the previous attempt.
-═══════════════════════════════════════════════════════════════
-
-"""
+                    feedback_section = config_manager.get_prompt(
+                        "P15",
+                        previous_feedback=previous_feedback
+                    )
                     logger.info(
                         "📝 FEEDBACK INJECTED INTO ENHANCEMENT PROMPT",
                         extra={"feedback_length": len(previous_feedback)}
                     )
                 
-                user_text = f"""{multi_image_context}{feedback_section}You are a TRANSLATOR, not a creative director.
-
-Your job:
-- Convert the user's request into precise technical instructions
-- Include what the user asked for - don't invent requirements they didn't mention
-- For unspecified details: follow the reference/inspiration if provided, otherwise use sensible defaults
-
-Key understanding:
-- CONTENT images (photos, products, models) are the canvas - their composition is final unless the user explicitly asks to change it
-- INSPIRATION/REFERENCE images guide what you ADD: typography style, text placement, colors, overlay aesthetics
-- Adapt overlay elements to fit the content image, not the other way around
-
-What you must NEVER do (unless user explicitly requests it):
-- Reposition, crop, or reframe the content photos
-- Add creative ideas the user didn't ask for
-
-                            Enhance this image editing request for {model_name}:
-
-{original_prompt}
-
-CRITICAL OUTPUT REQUIREMENTS:
-- Return ONLY the enhanced prompt text ready for direct API submission
-- NO explanations, warnings, recommendations, or meta-commentary
-- NO "IMPORTANT", "CRITICAL", "RECOMMENDED", or markdown sections
-- NO confidence levels, success predictions, or alternative approaches
-- NO anti-pattern warnings or hybrid workflow suggestions
-- Start immediately with the actual prompt instructions
-- Output must be copy-paste ready for the image editing API
-
-Your output MUST be the pure prompt with zero additional text."""
+                # LEGACY P2: Enhancement User Prompt - now from config
+                # """You are a TRANSLATOR, not a creative director...
+                # (full prompt moved to config/prompts.yaml)"""
+                
+                # Get enhancement user prompt from config
+                user_text = config_manager.get_prompt(
+                    "P2",
+                    model_name=model_name,
+                    original_prompt=original_prompt
+                )
+                
+                # Prepend multi-image context and feedback if needed
+                if feedback_section:
+                    user_text = feedback_section + user_text
+                if multi_image_context:
+                    user_text = multi_image_context + user_text
                 
                 # ═══════════════════════════════════════════════════════════
                 # BUILD USER CONTENT (text + optional images)
@@ -408,21 +397,22 @@ Your output MUST be the pure prompt with zero additional text."""
                 # USER PROMPT = Simple task with image count
                 # ═══════════════════════════════════════════════════════════
                 num_originals = len(original_images_bytes)
+                
+                # LEGACY P6/P7: Validation User Prompts - now from config
+                # Single: "Validate this edit... Compare IMAGE 1 (original) with IMAGE 2 (edited)..."
+                # Multi: "Validate this edit... Compare IMAGES 1-N (originals/inputs)..."
+                
                 if num_originals == 1:
-                    user_text = f"""Validate this edit.
-
-USER REQUEST: {original_request}
-
-Compare IMAGE 1 (original) with IMAGE 2 (edited).
-Return ONLY JSON."""
+                    user_text = config_manager.get_prompt(
+                        "P6",
+                        original_request=original_request
+                    )
                 else:
-                    user_text = f"""Validate this edit.
-
-USER REQUEST: {original_request}
-
-Compare IMAGES 1-{num_originals} (originals/inputs) with FINAL IMAGE (edited result).
-Verify ALL input images are properly incorporated in the output.
-Return ONLY JSON."""
+                    user_text = config_manager.get_prompt(
+                        "P7",
+                        original_request=original_request,
+                        num_originals=num_originals
+                    )
                 
                 # ═══════════════════════════════════════════════════════════
                 # PREPARE IMAGES - ALL originals + edited

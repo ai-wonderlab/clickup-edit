@@ -12,6 +12,7 @@ from pydantic import BaseModel
 from ..models.schemas import WebhookPayload, ClickUpTask, ClickUpAttachment, ClassifiedTask
 from ..utils.logger import get_logger
 from ..utils.config import get_config
+from ..utils.config_manager import config_manager
 from ..utils.image_converter import ImageConverter
 from ..utils.images import get_closest_aspect_ratio
 from ..utils.errors import UnsupportedFormatError, ImageConversionError
@@ -1001,13 +1002,15 @@ def _build_branded_prompt_v2(parsed_task: ParsedTask, dimension: str, brand_aest
     """Build prompt for branded creative generation from parsed task."""
     parts = []
     
-    # Dimension with framing principle
+    # LEGACY P10: Framing Principle - now from config
+    # """Create a {dimension} marketing graphic.
+    # Professional marketing graphics fill the entire canvas edge-to-edge...
+    # (full prompt moved to config/prompts.yaml)"""
+    
+    # Dimension with framing principle from config
     if dimension:
-        parts.append(f"Create a {dimension} marketing graphic.")
-        parts.append("""
-Professional marketing graphics fill the entire canvas edge-to-edge.
-Empty borders, padding, or letterboxing indicate technical failure, not intentional design.
-When adapting to an aspect ratio: expand flexible elements (backgrounds, negative space) to fill the frame - never compress content or add empty bands.""")
+        framing_principle = config_manager.get_prompt("P10", dimension=dimension)
+        parts.append(framing_principle)
     else:
         parts.append("Create a marketing graphic.")
     
@@ -1099,10 +1102,12 @@ When adapting to an aspect ratio: expand flexible elements (backgrounds, negativ
 
 def _build_adapt_prompt_v2(target_dimension: str) -> str:
     """Build adaptation prompt for subsequent dimensions."""
-    return f"""Adapt this image to {target_dimension} aspect ratio.
-Keep ALL content identical: same person, same text, same logo, same colors, same style.
-Reframe/expand the composition to fill the new {target_dimension} canvas edge-to-edge.
-Do NOT add borders or letterboxing."""
+    # LEGACY P11: Dimension Adaptation - now from config
+    # """Adapt this image to {dimension} aspect ratio.
+    # Keep ALL content identical: same person, same text, same logo, same colors, same style...
+    # (full prompt moved to config/prompts.yaml)"""
+    
+    return config_manager.get_prompt("P11", dimension=target_dimension)
 
 
 async def _process_branded_creative(

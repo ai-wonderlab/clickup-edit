@@ -19,6 +19,7 @@ from ..models.enums import ProcessStatus
 from ..utils.logger import get_logger
 from ..utils.errors import AllEnhancementsFailed, AllGenerationsFailed
 from ..utils.config import Config
+from ..utils.config_manager import config_manager
 
 logger = get_logger(__name__)
 
@@ -58,8 +59,9 @@ class Orchestrator:
             self.MAX_STEP_ATTEMPTS = config.max_step_attempts
             self.PASS_THRESHOLD = config.validation_pass_threshold
         else:
-            self.MAX_STEP_ATTEMPTS = 2
-            self.PASS_THRESHOLD = 8
+            # Fallback to ConfigManager (or hardcoded defaults)
+            self.MAX_STEP_ATTEMPTS = config_manager.get_parameter("MAX_STEP_ATTEMPTS", default=2)
+            self.PASS_THRESHOLD = config_manager.get_parameter("VALIDATION_PASS_THRESHOLD", default=8)
     
     def select_best_result(
         self,

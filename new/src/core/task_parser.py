@@ -7,6 +7,7 @@ from typing import List, Optional, Dict, Any
 from dataclasses import dataclass, field
 
 from ..utils.logger import get_logger
+from ..utils.config_manager import config_manager
 
 logger = get_logger(__name__)
 
