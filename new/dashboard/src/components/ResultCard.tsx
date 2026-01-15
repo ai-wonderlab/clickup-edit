@@ -1,7 +1,7 @@
 'use client';
 
 import { TaskResult } from '@/lib/supabase';
-import { CheckCircle, XCircle, Clock } from 'lucide-react';
+import { CheckCircle, XCircle, Clock, ThumbsUp, ThumbsDown } from 'lucide-react';
 
 interface ResultCardProps {
   result: TaskResult;
@@ -31,12 +31,31 @@ export default function ResultCard({ result }: ResultCardProps) {
           </div>
           <div className="min-w-0 flex-1">
             <p className="font-medium text-gray-900 truncate">{result.request}</p>
-            <div className="flex items-center gap-3 mt-1 text-sm text-gray-500">
+            <div className="flex items-center gap-3 mt-1 text-sm text-gray-500 flex-wrap">
               <span>Score: {result.score}/10</span>
               <span>•</span>
               <span>{result.model_used}</span>
               <span>•</span>
-              <span>{result.iterations} iteration{result.iterations !== 1 ? 's' : ''}</span>
+              <span>{result.iterations} iter</span>
+              
+              {/* Feedback Badge */}
+              {result.user_feedback && (
+                <>
+                  <span>•</span>
+                  <span className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${
+                    result.user_feedback === 'Like' 
+                      ? 'bg-green-100 text-green-700' 
+                      : 'bg-red-100 text-red-700'
+                  }`}>
+                    {result.user_feedback === 'Like' ? (
+                      <ThumbsUp className="w-3 h-3" />
+                    ) : (
+                      <ThumbsDown className="w-3 h-3" />
+                    )}
+                    {result.user_feedback}
+                  </span>
+                </>
+              )}
             </div>
           </div>
         </div>

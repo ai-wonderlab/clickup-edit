@@ -19,6 +19,7 @@ from ..utils.errors import UnsupportedFormatError, ImageConversionError
 from ..core.brand_analyzer import BrandAnalyzer
 from ..core.task_parser import TaskParser, ParsedTask
 from ..models.enums import TaskType
+from ..utils.supabase_client import supabase_client
 
 logger = get_logger(__name__)
 
@@ -260,6 +261,45 @@ async def get_lock_stats() -> dict:
 
 
 # ============================================================================
+# SUPABASE FEEDBACK SAVING
+# ============================================================================
+
+async def save_task_feedback(task_id: str, clickup_task_id: str, feedback: str):
+    """
+    Save user feedback to Supabase task_results table.
+    
+    Args:
+        task_id: Internal run ID
+        clickup_task_id: ClickUp task ID
+        feedback: "Like" or "Dislike"
+    """
+    if not supabase_client.is_connected:
+        logger.debug("Supabase not connected, skipping feedback save")
+        return
+    
+    try:
+        # Try to update existing record by clickup_task_id
+        from datetime import datetime
+        
+        result = supabase_client._client.table('task_results').update({
+            'user_feedback': feedback,
+        }).eq('clickup_task_id', clickup_task_id).execute()
+        
+        if result.data:
+            logger.info(
+                f"Updated feedback for task {clickup_task_id}: {feedback}",
+                extra={"clickup_task_id": clickup_task_id, "feedback": feedback}
+            )
+        else:
+            logger.info(
+                f"No existing record for task {clickup_task_id}, feedback will be saved with result",
+                extra={"clickup_task_id": clickup_task_id, "feedback": feedback}
+            )
+    except Exception as e:
+        logger.error(f"Failed to save feedback: {e}", extra={"error": str(e)})
+
+
+# ============================================================================
 # SIGNATURE VERIFICATION
 # ============================================================================
 
@@ -446,6 +486,10 @@ async def clickup_webhook(
             # ====================================================================
             task_parser = await get_task_parser(request)
             parsed = task_parser.parse(task_data)
+            
+            # ✅ Save feedback to Supabase if provided
+            if parsed.feedback:
+                await save_task_feedback(run_id, task_id, parsed.feedback)
             
             # Validate required fields based on task type
             if parsed.is_edit:

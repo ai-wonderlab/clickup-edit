@@ -33,6 +33,7 @@ class ParsedTask:
     style_direction: Optional[str] = None
     extra_notes: Optional[str] = None
     brand_website: Optional[str] = None
+    feedback: Optional[str] = None  # "Like" or "Dislike" from ClickUp
     
     # Dimensions
     dimensions: List[str] = field(default_factory=list)
@@ -79,6 +80,13 @@ class TaskParser:
         "Main Image": "main_image",
         "Reference Images": "reference_images",
         "Additional Images": "additional_images",
+        "Feedback": "feedback",
+    }
+    
+    # Feedback field label ID mapping
+    FEEDBACK_OPTIONS = {
+        "62c5d4c8-3520-434d-97cc-53f9b29d773c": "Like",
+        "2481418b-cad2-4822-a6ad-35d9f9e9232d": "Dislike",
     }
     
     def parse(self, task_data: Dict[str, Any]) -> ParsedTask:
@@ -110,6 +118,7 @@ class TaskParser:
             style_direction=self._parse_text(fields_by_name.get("Style Direction")),
             extra_notes=self._parse_text(fields_by_name.get("Extra Notes")),
             brand_website=self._parse_url(fields_by_name.get("Brand Website")),
+            feedback=self._parse_feedback(fields_by_name.get("Feedback")),
             dimensions=self._parse_labels(fields_by_name.get("Dimensions")),
             logo=self._parse_attachments(fields_by_name.get("Logo")),
             main_image=self._parse_attachments(fields_by_name.get("Main Image")),
@@ -126,6 +135,7 @@ class TaskParser:
                 "main_image_count": len(parsed.main_image),
                 "reference_count": len(parsed.reference_images),
                 "has_website": parsed.brand_website is not None,
+                "feedback": parsed.feedback,
             }
         )
         
@@ -176,6 +186,26 @@ class TaskParser:
             return None
         
         return value.strip()
+    
+    def _parse_feedback(self, field: Optional[Dict]) -> Optional[str]:
+        """Parse feedback labels field (Like/Dislike)."""
+        if not field:
+            return None
+        
+        value = field.get("value")
+        if not value:
+            return None
+        
+        # Value is a list of selected label IDs
+        if isinstance(value, list) and len(value) > 0:
+            option_id = value[0]  # Take first selected option
+            # Map ID to feedback name using our constant
+            if option_id in self.FEEDBACK_OPTIONS:
+                feedback = self.FEEDBACK_OPTIONS[option_id]
+                logger.info(f"Parsed feedback: {feedback}")
+                return feedback
+        
+        return None
     
     def _parse_labels(self, field: Optional[Dict]) -> List[str]:
         """Parse labels (multi-select) field to list of label strings."""

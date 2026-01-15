@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import StatsCard from '@/components/StatsCard';
-import { BarChart3, TrendingUp, Clock, CheckCircle, XCircle, Zap } from 'lucide-react';
+import { BarChart3, TrendingUp, Clock, CheckCircle, XCircle, Zap, ThumbsUp, ThumbsDown } from 'lucide-react';
 import Toast, { useToast } from '@/components/Toast';
 
 interface Metrics {
@@ -14,6 +14,10 @@ interface Metrics {
   avgIterations: number;
   avgDuration: number;
   modelUsage: Record<string, number>;
+  // Satisfaction metrics
+  likeCount: number;
+  dislikeCount: number;
+  satisfactionRate: number;
 }
 
 export default function Metrics() {
@@ -25,6 +29,9 @@ export default function Metrics() {
     avgIterations: 0,
     avgDuration: 0,
     modelUsage: {},
+    likeCount: 0,
+    dislikeCount: 0,
+    satisfactionRate: 0,
   });
   const [loading, setLoading] = useState(true);
   const { toasts, addToast, removeToast } = useToast();
@@ -69,6 +76,12 @@ export default function Metrics() {
           }
         });
 
+        // Calculate satisfaction metrics
+        const likeCount = data.filter((r) => r.user_feedback === 'Like').length;
+        const dislikeCount = data.filter((r) => r.user_feedback === 'Dislike').length;
+        const feedbackTotal = likeCount + dislikeCount;
+        const satisfactionRate = feedbackTotal > 0 ? Math.round((likeCount / feedbackTotal) * 100) : 0;
+
         const newMetrics = {
           totalTasks: data.length,
           passedTasks: passed,
@@ -77,6 +90,9 @@ export default function Metrics() {
           avgIterations: Math.round(avgIterations * 10) / 10,
           avgDuration: 0,
           modelUsage,
+          likeCount,
+          dislikeCount,
+          satisfactionRate,
         };
 
         console.log('[Metrics] Calculated:', newMetrics);
@@ -108,7 +124,7 @@ export default function Metrics() {
       </div>
 
       {/* Overview Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatsCard
           title="Total Tasks"
           value={metrics.totalTasks}
@@ -127,6 +143,15 @@ export default function Metrics() {
           trend={metrics.failedTasks > 0 ? 'down' : undefined}
         />
         <StatsCard
+          title="Pass Rate"
+          value={`${metrics.totalTasks > 0 ? Math.round((metrics.passedTasks / metrics.totalTasks) * 100) : 0}%`}
+          icon={<Clock className="w-5 h-5" />}
+        />
+      </div>
+
+      {/* Performance Stats */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <StatsCard
           title="Avg Score"
           value={`${metrics.avgScore}/10`}
           icon={<TrendingUp className="w-5 h-5" />}
@@ -137,11 +162,52 @@ export default function Metrics() {
           icon={<Zap className="w-5 h-5" />}
         />
         <StatsCard
-          title="Pass Rate"
-          value={`${metrics.totalTasks > 0 ? Math.round((metrics.passedTasks / metrics.totalTasks) * 100) : 0}%`}
-          icon={<Clock className="w-5 h-5" />}
+          title="Satisfaction Rate"
+          value={`${metrics.satisfactionRate}%`}
+          icon={<ThumbsUp className="w-5 h-5" />}
+          trend={metrics.satisfactionRate >= 80 ? 'up' : metrics.satisfactionRate < 50 ? 'down' : undefined}
+          subtitle={`${metrics.likeCount} likes, ${metrics.dislikeCount} dislikes`}
         />
       </div>
+
+      {/* Feedback Breakdown */}
+      {(metrics.likeCount > 0 || metrics.dislikeCount > 0) && (
+        <div className="bg-white border border-gray-200 rounded-lg p-6">
+          <h2 className="text-lg font-semibold text-gray-900 mb-4">User Feedback</h2>
+          <div className="flex items-center gap-8">
+            <div className="flex items-center gap-3">
+              <div className="p-3 bg-green-100 rounded-lg">
+                <ThumbsUp className="w-6 h-6 text-green-600" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold text-gray-900">{metrics.likeCount}</p>
+                <p className="text-sm text-gray-500">Likes</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
+              <div className="p-3 bg-red-100 rounded-lg">
+                <ThumbsDown className="w-6 h-6 text-red-600" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold text-gray-900">{metrics.dislikeCount}</p>
+                <p className="text-sm text-gray-500">Dislikes</p>
+              </div>
+            </div>
+            <div className="flex-1">
+              <div className="flex items-center gap-2 mb-1">
+                <span className="text-sm text-gray-500">Satisfaction</span>
+                <span className="text-sm font-medium text-gray-700">{metrics.satisfactionRate}%</span>
+              </div>
+              <div className="w-full bg-gray-200 rounded-full h-3">
+                <div
+                  className="bg-green-500 h-3 rounded-full transition-all"
+                  style={{ width: `${metrics.satisfactionRate}%` }}
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Model Usage */}
       {Object.keys(metrics.modelUsage).length > 0 && (

@@ -93,7 +93,8 @@ class TaskLogger:
         score: int,
         passed: bool,
         model_used: str,
-        iterations: int
+        iterations: int,
+        user_feedback: Optional[str] = None
     ) -> None:
         """Log final task result for metrics."""
         try:
@@ -104,7 +105,8 @@ class TaskLogger:
                 score=score,
                 passed=passed,
                 model_used=model_used,
-                iterations=iterations
+                iterations=iterations,
+                user_feedback=user_feedback
             )
         except Exception as e:
             logger.warning(f"Failed to log result: {e}")
