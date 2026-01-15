@@ -1,95 +1,148 @@
 'use client';
 
-import { useState } from 'react';
-import Editor from '@monaco-editor/react';
-import { Save, X } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Prompt } from '@/lib/supabase';
+import { X, Save, RotateCcw, Copy, Check } from 'lucide-react';
 
 interface PromptEditorProps {
-  promptId: string;
-  name: string;
-  initialContent: string;
-  onSave: (content: string) => Promise<void>;
+  prompt: Prompt;
+  onSave: (prompt: Prompt) => void;
   onClose: () => void;
+  saving?: boolean;
 }
 
-export default function PromptEditor({ 
-  promptId, 
-  name, 
-  initialContent, 
-  onSave, 
-  onClose 
-}: PromptEditorProps) {
-  const [content, setContent] = useState(initialContent);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+export default function PromptEditor({ prompt, onSave, onClose, saving }: PromptEditorProps) {
+  const [content, setContent] = useState(prompt.content);
+  const [copied, setCopied] = useState(false);
+  const [hasChanges, setHasChanges] = useState(false);
 
-  const handleSave = async () => {
-    setSaving(true);
-    setError(null);
-    try {
-      await onSave(content);
-      onClose();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to save');
-    } finally {
-      setSaving(false);
-    }
+  useEffect(() => {
+    setHasChanges(content !== prompt.content);
+  }, [content, prompt.content]);
+
+  const handleSave = () => {
+    onSave({ ...prompt, content });
   };
 
+  const handleReset = () => {
+    setContent(prompt.content);
+  };
+
+  const handleCopy = async () => {
+    await navigator.clipboard.writeText(content);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  // Close on Escape key
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+      if (e.key === 's' && (e.metaKey || e.ctrlKey)) {
+        e.preventDefault();
+        handleSave();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [content]);
+
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-xl shadow-2xl w-[90vw] h-[90vh] flex flex-col">
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b">
-          <div>
-            <h2 className="text-xl font-bold text-gray-900">{name}</h2>
-            <span className="text-sm text-gray-500">{promptId}</span>
-          </div>
+        <div className="flex items-center justify-between p-4 border-b border-gray-200">
           <div className="flex items-center gap-3">
-            {error && (
-              <span className="text-red-500 text-sm">{error}</span>
+            <span className="font-mono text-lg font-bold text-blue-600">
+              {prompt.prompt_id}
+            </span>
+            <span className="text-gray-600">{prompt.name}</span>
+            <span className="px-2 py-1 bg-gray-100 rounded text-xs text-gray-500">
+              {prompt.category}
+            </span>
+            {hasChanges && (
+              <span className="px-2 py-1 bg-yellow-100 text-yellow-700 rounded text-xs">
+                Unsaved changes
+              </span>
             )}
+          </div>
+          <button
+            onClick={onClose}
+            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+          >
+            <X className="w-5 h-5 text-gray-500" />
+          </button>
+        </div>
+
+        {/* Editor */}
+        <div className="flex-1 p-4 overflow-hidden">
+          <textarea
+            value={content}
+            onChange={(e) => setContent(e.target.value)}
+            className="w-full h-full min-h-[400px] p-4 border border-gray-200 rounded-lg font-mono text-sm resize-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            placeholder="Enter prompt content..."
+          />
+        </div>
+
+        {/* Footer */}
+        <div className="flex items-center justify-between p-4 border-t border-gray-200 bg-gray-50">
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleCopy}
+              className="flex items-center gap-2 px-3 py-2 text-gray-600 hover:bg-gray-200 rounded-lg transition-colors"
+            >
+              {copied ? (
+                <>
+                  <Check className="w-4 h-4 text-green-500" />
+                  <span className="text-green-600">Copied!</span>
+                </>
+              ) : (
+                <>
+                  <Copy className="w-4 h-4" />
+                  Copy
+                </>
+              )}
+            </button>
+            <button
+              onClick={handleReset}
+              disabled={!hasChanges}
+              className="flex items-center gap-2 px-3 py-2 text-gray-600 hover:bg-gray-200 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <RotateCcw className="w-4 h-4" />
+              Reset
+            </button>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-gray-400 mr-2">
+              ⌘S to save
+            </span>
             <button
               onClick={onClose}
-              className="p-2 text-gray-500 hover:text-gray-700"
+              className="px-4 py-2 text-gray-600 hover:bg-gray-200 rounded-lg transition-colors"
             >
-              <X size={20} />
+              Cancel
             </button>
             <button
               onClick={handleSave}
-              disabled={saving}
-              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+              disabled={saving || !hasChanges}
+              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <Save size={16} />
-              {saving ? 'Saving...' : 'Save'}
+              {saving ? (
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent" />
+                  Saving...
+                </>
+              ) : (
+                <>
+                  <Save className="w-4 h-4" />
+                  Save Changes
+                </>
+              )}
             </button>
           </div>
-        </div>
-        
-        {/* Editor */}
-        <div className="flex-1">
-          <Editor
-            height="100%"
-            defaultLanguage="markdown"
-            value={content}
-            onChange={(value) => setContent(value || '')}
-            theme="vs-light"
-            options={{
-              minimap: { enabled: false },
-              fontSize: 14,
-              lineNumbers: 'on',
-              wordWrap: 'on',
-              padding: { top: 16 },
-            }}
-          />
-        </div>
-        
-        {/* Footer */}
-        <div className="px-6 py-3 border-t bg-gray-50 text-sm text-gray-500">
-          Lines: {content.split('\n').length} • Characters: {content.length}
         </div>
       </div>
     </div>
   );
 }
-
