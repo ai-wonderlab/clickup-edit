@@ -1,8 +1,0 @@
-[phases.setup]
-nixPkgs = ["python312"]
-
-[phases.install]
-cmds = ["python -m pip install -r new/requirements.txt"]
-
-[start]
-cmd = "cd new && uvicorn src.main:app --host 0.0.0.0 --port $PORT"
