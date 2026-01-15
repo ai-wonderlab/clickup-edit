@@ -1,8 +1,12 @@
 __pycache__/
 *.pyc
 .env
+.env.local
 venv/
 *.log
 .DS_Store
 celerybeat-schedule
 dump.rdb
+node_modules/
+.next/
+.vercel/
