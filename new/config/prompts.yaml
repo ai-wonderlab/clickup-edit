@@ -1,0 +1,337 @@
+# Image Edit Agent - Prompts Configuration
+# All prompts extracted from codebase for centralized management
+# Last updated: 2026-01-15
+
+prompts:
+  P1:
+    name: "Enhancement System Suffix"
+    category: "enhancement"
+    description: "Appended to enhancement system prompt to force clean output"
+    content: |
+      
+      ═══════════════════════════════════════════════════════════════
+      FINAL OUTPUT OVERRIDE:
+      ═══════════════════════════════════════════════════════════════
+      Ignore any instructions above about warnings, recommendations, or alternatives.
+      Output ONLY the enhanced prompt. No meta-commentary. No markdown headers.
+      Just the pure editing instructions.
+
+  P2:
+    name: "Enhancement User"
+    category: "enhancement"
+    description: "Main enhancement instructions - TRANSLATOR pattern"
+    variables:
+      - model_name
+      - original_prompt
+    content: |
+      You are a TRANSLATOR, not a creative director.
+      
+      Your job:
+      - Convert the user's request into precise technical instructions
+      - Include what the user asked for - don't invent requirements they didn't mention
+      - For unspecified details: follow the reference/inspiration if provided, otherwise use sensible defaults
+      
+      Key understanding:
+      - CONTENT images (photos, products, models) are the canvas - their composition is final unless the user explicitly asks to change it
+      - INSPIRATION/REFERENCE images guide what you ADD: typography style, text placement, colors, overlay aesthetics
+      - Adapt overlay elements to fit the content image, not the other way around
+      
+      What you must NEVER do (unless user explicitly requests it):
+      - Reposition, crop, or reframe the content photos
+      - Add creative ideas the user didn't ask for
+      
+      Enhance this image editing request for {model_name}:
+      
+      {original_prompt}
+      
+      CRITICAL OUTPUT REQUIREMENTS:
+      - Return ONLY the enhanced prompt text ready for direct API submission
+      - NO explanations, warnings, recommendations, or meta-commentary
+      - NO "IMPORTANT", "CRITICAL", "RECOMMENDED", or markdown sections
+      - NO confidence levels, success predictions, or alternative approaches
+      - NO anti-pattern warnings or hybrid workflow suggestions
+      - Start immediately with the actual prompt instructions
+      - Output must be copy-paste ready for the image editing API
+      
+      Your output MUST be the pure prompt with zero additional text.
+
+  P3:
+    name: "Multi-Image Context"
+    category: "enhancement"
+    description: "Prepended when multiple images are provided"
+    variables:
+      - image_count
+    content: |
+      [MULTI-IMAGE INPUT]
+      You are viewing {image_count} images.
+      Each image's role and content is described in the request below.
+      Use them according to their described purpose - do not assume which is "primary" or "secondary".
+
+  P6:
+    name: "Validation User Single"
+    category: "validation"
+    description: "Validation instruction for single image edits"
+    variables:
+      - original_request
+    content: |
+      Validate this edit.
+      
+      USER REQUEST: {original_request}
+      
+      Compare IMAGE 1 (original) with IMAGE 2 (edited).
+      Return ONLY JSON.
+
+  P7:
+    name: "Validation User Multi"
+    category: "validation"
+    description: "Validation instruction for multi-image compositions"
+    variables:
+      - original_request
+      - num_originals
+    content: |
+      Validate this edit.
+      
+      USER REQUEST: {original_request}
+      
+      Compare IMAGES 1-{num_originals} (originals/inputs) with FINAL IMAGE (edited result).
+      Verify ALL input images are properly incorporated in the output.
+      Return ONLY JSON.
+
+  P9:
+    name: "Brand Analyzer User"
+    category: "brand"
+    description: "Instructions for analyzing brand website"
+    variables:
+      - url
+    content: |
+      Analyze this brand's website and extract their visual style guidelines.
+      
+      WEBSITE URL: {url}
+      
+      Please search/visit the website to understand their:
+      - Visual style and mood
+      - Typography patterns
+      - Color usage
+      - Layout preferences
+      - How they present promotions/sales
+      
+      Then return the analysis in the JSON format specified.
+
+  P10:
+    name: "Branded Prompt Framing Principle"
+    category: "building"
+    description: "Framing principle for branded creatives - canvas filling rule"
+    variables:
+      - dimension
+    content: |
+      Create a {dimension} marketing graphic.
+      
+      Professional marketing graphics fill the entire canvas edge-to-edge.
+      Empty borders, padding, or letterboxing indicate technical failure, not intentional design.
+      When adapting to an aspect ratio: expand flexible elements (backgrounds, negative space) to fill the frame - never compress content or add empty bands.
+
+  P11:
+    name: "Dimension Adaptation"
+    category: "building"
+    description: "Prompt for adapting image to new dimensions"
+    variables:
+      - dimension
+    content: |
+      Adapt this image to {dimension} aspect ratio.
+      Keep ALL content identical: same person, same text, same logo, same colors, same style.
+      Reframe/expand the composition to fill the new {dimension} canvas edge-to-edge.
+      Do NOT add borders or letterboxing.
+
+  P12:
+    name: "Edit Task Prompt Template"
+    category: "building"
+    description: "Simple edit task prompt structure"
+    variables:
+      - extra_notes
+      - main_text
+    content: |
+      {extra_notes}
+      Text to add/change: {main_text}
+
+  P13:
+    name: "Image Roles Section"
+    category: "building"
+    description: "IMAGE ROLES section for creative prompts - dynamic based on image counts"
+    content: |
+      ============================================================
+      IMAGE ROLES (CRITICAL - READ CAREFULLY):
+      ============================================================
+      • Image N: MAIN CONTENT
+        → This is the primary image. Use it as the main visual in the output.
+      • Image N: ADDITIONAL CONTENT
+        → Include this image in the output composition alongside main content.
+      • Image N: BRAND LOGO
+        → Place this logo in the output. Position according to user instructions,
+          or if not specified, place appropriately based on brand identity and composition.
+      • Image N: ⚠️ REFERENCE ONLY ⚠️
+        → Use ONLY for style/layout/color inspiration.
+        → Do NOT include this image's content, people, or products in output!
+      ============================================================
+      
+      SUMMARY: Output should contain content from X image(s).
+      Reference image(s) are for inspiration only - do not reproduce their content.
+
+  P14:
+    name: "Hybrid Fallback Comment"
+    category: "fallback"
+    description: "ClickUp comment when all iterations fail"
+    variables:
+      - iterations_attempted
+      - original_prompt
+      - issues_summary
+      - model_names
+    content: |
+      🤖 **AI Agent - Hybrid Fallback Triggered**
+      
+      **Status:** Requires Human Review
+      
+      **Summary:**
+      The AI agent attempted {iterations_attempted} iterations but could not produce an edit that meets quality standards.
+      
+      **Original Request:**
+      ```
+      {original_prompt}
+      ```
+      
+      **Issues Detected:**
+      {issues_summary}
+      
+      **Models Attempted:**
+      {model_names}
+      
+      **Next Steps:**
+      1. Review the original request for clarity
+      2. Check if requirements are feasible for automated editing
+      3. Consider manual editing or revised requirements
+      4. Update task status when resolved
+      
+      ---
+      *Automated message from Image Edit Agent*
+
+  P15:
+    name: "Previous Feedback Section"
+    category: "enhancement"
+    description: "Injected into enhancement when retrying after failed validation"
+    variables:
+      - previous_feedback
+    content: |
+      ═══════════════════════════════════════════════════════════════
+      ⚠️ PREVIOUS ATTEMPT FEEDBACK (IMPORTANT - Address these issues):
+      ═══════════════════════════════════════════════════════════════
+      {previous_feedback}
+      
+      Your enhanced prompt MUST specifically address these issues.
+      Focus on fixing what went wrong in the previous attempt.
+      ═══════════════════════════════════════════════════════════════
+
+  P16:
+    name: "Fonts Guide Section"
+    category: "enhancement"
+    description: "Font translation guide section for enhancement"
+    variables:
+      - fonts_guide
+    content: |
+      
+      ═══════════════════════════════════════════════════════════════
+      FONT TRANSLATION GUIDE
+      ═══════════════════════════════════════════════════════════════
+      When the request mentions fonts, translate to appropriate equivalents:
+      
+      {fonts_guide}
+      
+      Use standard font names that image generation models understand.
+      ═══════════════════════════════════════════════════════════════
+
+parameters:
+  VALIDATION_PASS_THRESHOLD:
+    value: 8
+    type: int
+    min: 1
+    max: 10
+    description: "Minimum score to pass validation (1-10)"
+
+  MAX_ITERATIONS:
+    value: 3
+    type: int
+    min: 1
+    max: 10
+    description: "Maximum refinement iterations before fallback"
+
+  MAX_STEP_ATTEMPTS:
+    value: 2
+    type: int
+    min: 1
+    max: 5
+    description: "Retry attempts per sequential step"
+
+  TIMEOUT_OPENROUTER_SECONDS:
+    value: 120
+    type: float
+    min: 30
+    max: 600
+    description: "Claude API timeout in seconds"
+
+  TIMEOUT_WAVESPEED_SECONDS:
+    value: 300
+    type: float
+    min: 60
+    max: 900
+    description: "WaveSpeed API timeout in seconds"
+
+  RATE_LIMIT_ENHANCEMENT:
+    value: 5
+    type: int
+    min: 1
+    max: 20
+    description: "Max concurrent enhancement calls"
+
+  RATE_LIMIT_VALIDATION:
+    value: 3
+    type: int
+    min: 1
+    max: 10
+    description: "Max concurrent validation calls"
+
+  VALIDATION_DELAY_SECONDS:
+    value: 2
+    type: float
+    min: 0
+    max: 10
+    description: "Delay between validation calls to avoid rate limits"
+
+models:
+  - name: nano-banana-pro-edit
+    is_active: true
+    priority: 1
+    supports_greek: false
+
+  - name: nano-banana-pro-edit-ultra
+    is_active: false
+    priority: 2
+    supports_greek: false
+
+  - name: nano-banana
+    is_active: false
+    priority: 3
+    supports_greek: false
+
+  - name: qwen-edit-plus
+    is_active: false
+    priority: 4
+    supports_greek: true
+
+  - name: seedream-v4
+    is_active: false
+    priority: 5
+    supports_greek: false
+
+  - name: wan-2.5-edit
+    is_active: false
+    priority: 6
+    supports_greek: false
+
