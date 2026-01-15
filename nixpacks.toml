@@ -6,8 +6,3 @@ cmds = ["pip install -r new/requirements.txt"]
 
 [start]
 cmd = "cd new && uvicorn src.main:app --host 0.0.0.0 --port $PORT"
-```
-
-### Option B: Create `runtime.txt` in root
-```
-python-3.11.0
