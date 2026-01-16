@@ -55,21 +55,50 @@ class Orchestrator:
         self.refiner = refiner
         self.hybrid_fallback = hybrid_fallback
 
-        # Read all parameters from ConfigManager (Supabase → YAML → env → default)
+        # ═══════════════════════════════════════════════════════════════
+        # PARAMETERS: Always read from Supabase FIRST via config_manager
+        # Fallback chain: Supabase → YAML → env config → hardcoded default
+        # ═══════════════════════════════════════════════════════════════
+        
+        # MAX_ITERATIONS: Explicit param > Supabase > env config > default
         if max_iterations is not None:
             self.max_iterations = max_iterations
-        elif config and config.processing:
-            self.max_iterations = config.processing.max_iterations
         else:
-            self.max_iterations = config_manager.get_parameter("MAX_ITERATIONS", default=3)
-
-        if config:
+            supabase_value = config_manager.get_parameter("MAX_ITERATIONS", default=None)
+            if supabase_value is not None:
+                self.max_iterations = supabase_value
+            elif config and config.processing:
+                self.max_iterations = config.processing.max_iterations
+            else:
+                self.max_iterations = 3
+        
+        # MAX_STEP_ATTEMPTS: Supabase > env config > default
+        supabase_step_attempts = config_manager.get_parameter("MAX_STEP_ATTEMPTS", default=None)
+        if supabase_step_attempts is not None:
+            self.MAX_STEP_ATTEMPTS = supabase_step_attempts
+        elif config:
             self.MAX_STEP_ATTEMPTS = config.max_step_attempts
+        else:
+            self.MAX_STEP_ATTEMPTS = 2
+        
+        # VALIDATION_PASS_THRESHOLD: Supabase > env config > default
+        supabase_threshold = config_manager.get_parameter("VALIDATION_PASS_THRESHOLD", default=None)
+        if supabase_threshold is not None:
+            self.PASS_THRESHOLD = supabase_threshold
+        elif config:
             self.PASS_THRESHOLD = config.validation_pass_threshold
         else:
-            # Fallback to ConfigManager (Supabase → YAML → env → default)
-            self.MAX_STEP_ATTEMPTS = config_manager.get_parameter("MAX_STEP_ATTEMPTS", default=2)
-            self.PASS_THRESHOLD = config_manager.get_parameter("VALIDATION_PASS_THRESHOLD", default=8)
+            self.PASS_THRESHOLD = 8
+        
+        logger.info(
+            "Orchestrator parameters loaded",
+            extra={
+                "max_iterations": self.max_iterations,
+                "max_step_attempts": self.MAX_STEP_ATTEMPTS,
+                "pass_threshold": self.PASS_THRESHOLD,
+                "source": "supabase_priority"
+            }
+        )
     
     def select_best_result(
         self,
