@@ -5,26 +5,17 @@ import { supabase, Parameter } from '@/lib/supabase';
 import { Save, RotateCcw, Info } from 'lucide-react';
 import Toast, { useToast } from '@/components/Toast';
 
+// Only show parameters that are actually used by the backend
 const DEFAULT_PARAMETERS: Omit<Parameter, 'id'>[] = [
-  { key: 'VALIDATION_PASS_THRESHOLD', value: '8', type: 'int', min_value: 1, max_value: 10, updated_at: '' },
   { key: 'MAX_ITERATIONS', value: '3', type: 'int', min_value: 1, max_value: 10, updated_at: '' },
   { key: 'MAX_STEP_ATTEMPTS', value: '2', type: 'int', min_value: 1, max_value: 5, updated_at: '' },
-  { key: 'TIMEOUT_OPENROUTER_SECONDS', value: '120', type: 'float', min_value: 30, max_value: 600, updated_at: '' },
-  { key: 'TIMEOUT_WAVESPEED_SECONDS', value: '300', type: 'float', min_value: 60, max_value: 900, updated_at: '' },
-  { key: 'RATE_LIMIT_ENHANCEMENT', value: '5', type: 'int', min_value: 1, max_value: 20, updated_at: '' },
-  { key: 'RATE_LIMIT_VALIDATION', value: '3', type: 'int', min_value: 1, max_value: 10, updated_at: '' },
-  { key: 'VALIDATION_DELAY_SECONDS', value: '2', type: 'float', min_value: 0, max_value: 10, updated_at: '' },
+  { key: 'VALIDATION_PASS_THRESHOLD', value: '8', type: 'int', min_value: 1, max_value: 10, updated_at: '' },
 ];
 
 const PARAMETER_DESCRIPTIONS: Record<string, string> = {
-  VALIDATION_PASS_THRESHOLD: 'Minimum score (1-10) to pass validation',
-  MAX_ITERATIONS: 'Maximum refinement iterations before fallback',
-  MAX_STEP_ATTEMPTS: 'Retry attempts per sequential step',
-  TIMEOUT_OPENROUTER_SECONDS: 'Claude API timeout in seconds',
-  TIMEOUT_WAVESPEED_SECONDS: 'WaveSpeed API timeout in seconds',
-  RATE_LIMIT_ENHANCEMENT: 'Max concurrent enhancement calls',
-  RATE_LIMIT_VALIDATION: 'Max concurrent validation calls',
-  VALIDATION_DELAY_SECONDS: 'Delay between validation calls',
+  MAX_ITERATIONS: 'Maximum refinement iterations before fallback (used in orchestrator.py)',
+  MAX_STEP_ATTEMPTS: 'Retry attempts per sequential step (used in orchestrator.py)',
+  VALIDATION_PASS_THRESHOLD: 'Minimum score (1-10) to pass validation (used in orchestrator.py)',
 };
 
 export default function Settings() {
