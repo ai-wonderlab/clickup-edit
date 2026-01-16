@@ -27,15 +27,18 @@ class BrandAnalyzer:
         self.prompt_template = self._load_prompt()
     
     def _load_prompt(self) -> str:
-        """Load brand analyzer prompt from file."""
-        prompt_path = Path("config/prompts/brand_analyzer_prompt.txt")
+        """Load brand analyzer prompt via config_manager (Supabase → YAML → File fallback)."""
+        content = config_manager.get_brand_analyzer_prompt()
         
-        if not prompt_path.exists():
-            logger.error(f"Brand analyzer prompt not found: {prompt_path}")
-            raise FileNotFoundError(f"Brand analyzer prompt not found: {prompt_path}")
+        if not content or content.startswith("[MISSING PROMPT:"):
+            logger.error("Brand analyzer prompt not found in config_manager")
+            raise FileNotFoundError("Brand analyzer prompt not found")
         
-        with open(prompt_path, "r", encoding="utf-8") as f:
-            return f.read()
+        logger.info(
+            "Brand analyzer prompt loaded",
+            extra={"length": len(content), "source": "config_manager"}
+        )
+        return content
     
     async def analyze(self, website_url: str) -> Optional[dict]:
         """

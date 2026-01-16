@@ -7,7 +7,7 @@ from ..providers.openrouter import OpenRouterClient
 from ..models.schemas import EnhancedPrompt
 from ..utils.logger import get_logger
 from ..utils.errors import AllEnhancementsFailed
-from ..utils.config import load_deep_research
+from ..utils.config_manager import config_manager
 
 logger = get_logger(__name__)
 
@@ -32,12 +32,20 @@ class PromptEnhancer:
         self.deep_research_cache: Dict[str, Dict[str, str]] = {}
     
     async def load_deep_research(self):
-        """Load all deep research files into memory cache."""
-        logger.info("Loading deep research files")
+        """Load all deep research via config_manager (Supabase → File fallback)."""
+        logger.info("Loading deep research files via config_manager")
         
         for model_name in self.model_names:
             try:
-                research = load_deep_research(model_name)
+                # Get deep research from config_manager (tries Supabase first, then files)
+                research = config_manager.get_deep_research(model_name)
+                
+                if not research["activation"] and not research["research"]:
+                    logger.warning(
+                        f"No deep research found for {model_name}",
+                        extra={"model": model_name}
+                    )
+                    continue
                 
                 # Combine activation and research into single prompt
                 self.deep_research_cache[model_name] = (
@@ -49,6 +57,7 @@ class PromptEnhancer:
                     extra={
                         "model": model_name,
                         "total_length": len(self.deep_research_cache[model_name]),
+                        "source": "config_manager",
                     }
                 )
                 

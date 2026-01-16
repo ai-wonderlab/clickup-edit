@@ -12,7 +12,6 @@ from ..utils.logger import get_logger
 from ..utils.errors import ProviderError, AuthenticationError, RateLimitError
 from ..utils.retry import retry_async
 from ..utils.images import resize_for_context
-from ..utils.config import load_fonts_guide
 from ..utils.config_manager import config_manager
 from ..models.schemas import ValidationResult
 from ..models.enums import ValidationStatus
@@ -116,8 +115,8 @@ class OpenRouterClient(BaseProvider):
                 # SYSTEM PROMPT = Deep research + Fonts guide
                 # ═══════════════════════════════════════════════════════════
                 
-                # Add fonts guide to system prompt
-                fonts_guide = load_fonts_guide()
+                # Add fonts guide to system prompt (P17 from config_manager)
+                fonts_guide = config_manager.get_fonts_guide()
                 fonts_section = ""
                 if fonts_guide:
                     fonts_section = f"""

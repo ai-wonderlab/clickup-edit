@@ -8,7 +8,7 @@ from typing import List
 from ..providers.openrouter import OpenRouterClient
 from ..models.schemas import GeneratedImage, ValidationResult
 from ..utils.logger import get_logger
-from ..utils.config import load_validation_prompt, load_fonts_guide
+from ..utils.config_manager import config_manager
 from ..utils.images import resize_for_context
 
 logger = get_logger(__name__)
@@ -30,32 +30,32 @@ class Validator:
         self._fonts_guide = None
     
     def load_validation_prompt(self):
-        """Load validation prompt templates from file and inject fonts guide."""
-        logger.info("Loading validation prompt templates")
+        """Load validation prompt templates from config_manager (Supabase → YAML → File fallback)."""
+        logger.info("Loading validation prompt templates via config_manager")
         
-        # Load fonts guide once
-        self._fonts_guide = load_fonts_guide()
+        # Load fonts guide once (P17)
+        self._fonts_guide = config_manager.get_fonts_guide()
         
-        # Load default (SIMPLE_EDIT) prompt
-        self.validation_prompt_template = load_validation_prompt("SIMPLE_EDIT")
+        # Load default (SIMPLE_EDIT) prompt (P4)
+        self.validation_prompt_template = config_manager.get_validation_prompt("SIMPLE_EDIT")
         if self._fonts_guide and "{fonts_guide}" in self.validation_prompt_template:
             self.validation_prompt_template = self.validation_prompt_template.replace(
                 "{fonts_guide}", self._fonts_guide
             )
         logger.info(
             "Default validation prompt loaded",
-            extra={"length": len(self.validation_prompt_template)}
+            extra={"length": len(self.validation_prompt_template), "source": "config_manager"}
         )
         
-        # Load BRANDED_CREATIVE prompt
-        self.validation_prompt_branded = load_validation_prompt("BRANDED_CREATIVE")
+        # Load BRANDED_CREATIVE prompt (P5)
+        self.validation_prompt_branded = config_manager.get_validation_prompt("BRANDED_CREATIVE")
         if self._fonts_guide and "{fonts_guide}" in self.validation_prompt_branded:
             self.validation_prompt_branded = self.validation_prompt_branded.replace(
                 "{fonts_guide}", self._fonts_guide
             )
         logger.info(
             "Branded validation prompt loaded",
-            extra={"length": len(self.validation_prompt_branded)}
+            extra={"length": len(self.validation_prompt_branded), "source": "config_manager"}
         )
     
     async def validate_single(

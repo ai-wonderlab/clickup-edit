@@ -184,8 +184,104 @@ Reframe/expand the composition to fill the new {dimension} canvas edge-to-edge.
 Do NOT add borders or letterboxing.""",
         }
         
+        # Try file fallback for specific prompts
+        file_fallback = self._get_file_fallback(prompt_id)
+        if file_fallback:
+            return self._substitute_variables(file_fallback, variables)
+        
         content = fallbacks.get(prompt_id, f"[MISSING PROMPT: {prompt_id}]")
         return self._substitute_variables(content, variables)
+    
+    def _get_file_fallback(self, prompt_id: str) -> Optional[str]:
+        """
+        Load prompt from file if not in Supabase/YAML.
+        This is the final fallback for large prompts stored in files.
+        """
+        config_dir = Path(__file__).parent.parent.parent / "config"
+        
+        file_mappings = {
+            "P4": config_dir / "prompts" / "validation_prompt.txt",
+            "P5": config_dir / "prompts" / "validation_branded_creative.txt",
+            "P8": config_dir / "prompts" / "brand_analyzer_prompt.txt",
+            "P17": config_dir / "shared" / "fonts.md",
+        }
+        
+        # Handle deep research prompts (DR_{model}_activation, DR_{model}_research)
+        if prompt_id.startswith("DR_") and "_" in prompt_id[3:]:
+            parts = prompt_id[3:].rsplit("_", 1)  # Split from right
+            if len(parts) == 2:
+                model_name, prompt_type = parts
+                if prompt_type == "activation":
+                    file_mappings[prompt_id] = config_dir / "deep_research" / model_name / "activation.txt"
+                elif prompt_type == "research":
+                    file_mappings[prompt_id] = config_dir / "deep_research" / model_name / "research.md"
+        
+        file_path = file_mappings.get(prompt_id)
+        if file_path and file_path.exists():
+            try:
+                content = file_path.read_text(encoding="utf-8")
+                logger.debug(f"Loaded {prompt_id} from file fallback: {file_path}")
+                return content
+            except Exception as e:
+                logger.warning(f"Failed to load {prompt_id} from file: {e}")
+        
+        return None
+    
+    def get_validation_prompt(self, task_type: str = "SIMPLE_EDIT") -> str:
+        """
+        Get validation system prompt by task type.
+        
+        Args:
+            task_type: SIMPLE_EDIT or BRANDED_CREATIVE
+            
+        Returns:
+            Validation prompt content
+        """
+        prompt_id = "P5" if task_type == "BRANDED_CREATIVE" else "P4"
+        return self.get_prompt(prompt_id)
+    
+    def get_fonts_guide(self) -> str:
+        """
+        Get fonts translation guide.
+        
+        Returns:
+            Fonts guide content or empty string
+        """
+        content = self.get_prompt("P17")
+        return content if content != "[MISSING PROMPT: P17]" else ""
+    
+    def get_deep_research(self, model_name: str) -> Dict[str, str]:
+        """
+        Get deep research files for a model.
+        
+        Args:
+            model_name: Model name (e.g., 'nano-banana-pro-edit')
+            
+        Returns:
+            Dict with 'activation' and 'research' content
+        """
+        activation = self.get_prompt(f"DR_{model_name}_activation")
+        research = self.get_prompt(f"DR_{model_name}_research")
+        
+        # Check if we got valid content
+        if activation.startswith("[MISSING PROMPT:"):
+            activation = ""
+        if research.startswith("[MISSING PROMPT:"):
+            research = ""
+        
+        return {
+            "activation": activation,
+            "research": research,
+        }
+    
+    def get_brand_analyzer_prompt(self) -> str:
+        """
+        Get brand analyzer system prompt.
+        
+        Returns:
+            Brand analyzer prompt content
+        """
+        return self.get_prompt("P8")
     
     def get_parameter(self, key: str, default: Any = None) -> Any:
         """
