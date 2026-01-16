@@ -67,7 +67,7 @@ async def lifespan(app: FastAPI):
             openrouter_client=openrouter,
             model_names=model_names,
         )
-        await enhancer.load_deep_research()
+        # NOTE: Deep research now loaded FRESH per-task from Supabase (not cached at startup)
         
         generator = ImageGenerator(
             wavespeed_client=wavespeed,
@@ -76,7 +76,7 @@ async def lifespan(app: FastAPI):
         validator = Validator(
             openrouter_client=openrouter,
         )
-        validator.load_validation_prompt()
+        # NOTE: Validation prompts now loaded FRESH per-task from Supabase (not cached at startup)
         
         refiner = Refiner(
             enhancer=enhancer,

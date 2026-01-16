@@ -25,38 +25,30 @@ class Validator:
             openrouter_client: OpenRouter API client
         """
         self.client = openrouter_client
-        self.validation_prompt_template = None  # Default (SIMPLE_EDIT)
-        self.validation_prompt_branded = None   # BRANDED_CREATIVE
-        self._fonts_guide = None
+        # NOTE: Prompts are loaded FRESH for each validation to pick up Supabase changes
     
     def load_validation_prompt(self):
-        """Load validation prompt templates from config_manager (Supabase → YAML → File fallback)."""
-        logger.info("Loading validation prompt templates via config_manager")
+        """Legacy method - now a no-op. Prompts are loaded fresh in _get_validation_prompt()."""
+        logger.info("load_validation_prompt() called - prompts now loaded fresh per-task")
+    
+    def _get_validation_prompt(self, task_type: str = "SIMPLE_EDIT") -> str:
+        """
+        Load validation prompt FRESH from Supabase for each task.
+        This ensures prompt changes in UI take effect immediately without redeploy.
+        """
+        logger.info(f"🔄 Loading validation prompt fresh for task_type={task_type}")
         
-        # Load fonts guide once (P17)
-        self._fonts_guide = config_manager.get_fonts_guide()
+        # Load fonts guide fresh (P17)
+        fonts_guide = config_manager.get_fonts_guide()
         
-        # Load default (SIMPLE_EDIT) prompt (P4)
-        self.validation_prompt_template = config_manager.get_validation_prompt("SIMPLE_EDIT")
-        if self._fonts_guide and "{fonts_guide}" in self.validation_prompt_template:
-            self.validation_prompt_template = self.validation_prompt_template.replace(
-                "{fonts_guide}", self._fonts_guide
-            )
-        logger.info(
-            "Default validation prompt loaded",
-            extra={"length": len(self.validation_prompt_template), "source": "config_manager"}
-        )
+        # Load the appropriate prompt (P4 or P5)
+        prompt = config_manager.get_validation_prompt(task_type)
         
-        # Load BRANDED_CREATIVE prompt (P5)
-        self.validation_prompt_branded = config_manager.get_validation_prompt("BRANDED_CREATIVE")
-        if self._fonts_guide and "{fonts_guide}" in self.validation_prompt_branded:
-            self.validation_prompt_branded = self.validation_prompt_branded.replace(
-                "{fonts_guide}", self._fonts_guide
-            )
-        logger.info(
-            "Branded validation prompt loaded",
-            extra={"length": len(self.validation_prompt_branded), "source": "config_manager"}
-        )
+        # Inject fonts guide if placeholder exists
+        if fonts_guide and "{fonts_guide}" in prompt:
+            prompt = prompt.replace("{fonts_guide}", fonts_guide)
+        
+        return prompt
     
     async def validate_single(
         self,
@@ -80,9 +72,6 @@ class Validator:
         Raises:
             Exception: If validation fails
         """
-        if not self.validation_prompt_template:
-            raise RuntimeError("Validation prompt not loaded. Call load_validation_prompt() first.")
-        
         model_name = generated_image.model_name
         
         logger.info("")
@@ -106,22 +95,18 @@ class Validator:
             }
         )
         
-        # Select prompt based on task type
-        if task_type == "BRANDED_CREATIVE":
-            base_prompt = self.validation_prompt_branded or self.validation_prompt_template
-            prompt_source = "branded"
-        else:
-            base_prompt = self.validation_prompt_template
-            prompt_source = "default"
-        
-        formatted_prompt = base_prompt
+        # ═══════════════════════════════════════════════════════════════
+        # LOAD PROMPT FRESH FROM SUPABASE (not cached!)
+        # This ensures UI changes take effect immediately without redeploy
+        # ═══════════════════════════════════════════════════════════════
+        formatted_prompt = self._get_validation_prompt(task_type)
         
         logger.info(
-            "📝 VALIDATION PROMPT SELECTED",
+            "📝 VALIDATION PROMPT LOADED FRESH",
             extra={
                 "task_type": task_type,
-                "prompt_source": prompt_source,
                 "prompt_length": len(formatted_prompt),
+                "source": "supabase_fresh"
             }
         )
         

@@ -29,49 +29,39 @@ class PromptEnhancer:
         """
         self.client = openrouter_client
         self.model_names = model_names
-        self.deep_research_cache: Dict[str, Dict[str, str]] = {}
+        # NOTE: Deep research is loaded FRESH for each enhancement to pick up Supabase changes
     
     async def load_deep_research(self):
-        """Load all deep research via config_manager (Supabase → File fallback)."""
-        logger.info("Loading deep research files via config_manager")
+        """Legacy method - now a no-op. Deep research is loaded fresh per-enhancement."""
+        logger.info("load_deep_research() called - deep research now loaded fresh per-task")
+    
+    def _get_deep_research_fresh(self, model_name: str) -> str:
+        """
+        Load deep research FRESH from Supabase for each task.
+        This ensures prompt changes in UI take effect immediately without redeploy.
         
-        for model_name in self.model_names:
-            try:
-                # Get deep research from config_manager (tries Supabase first, then files)
-                research = config_manager.get_deep_research(model_name)
-                
-                if not research["activation"] and not research["research"]:
-                    logger.warning(
-                        f"No deep research found for {model_name}",
-                        extra={"model": model_name}
-                    )
-                    continue
-                
-                # Combine activation and research into single prompt
-                self.deep_research_cache[model_name] = (
-                    research["activation"] + "\n\n" + research["research"]
-                )
-                
-                logger.info(
-                    f"Loaded deep research for {model_name}",
-                    extra={
-                        "model": model_name,
-                        "total_length": len(self.deep_research_cache[model_name]),
-                        "source": "config_manager",
-                    }
-                )
-                
-            except Exception as e:
-                logger.error(
-                    f"Failed to load deep research for {model_name}: {e}",
-                    extra={"model": model_name, "error": str(e)}
-                )
-                # Continue loading other models
+        Args:
+            model_name: The model to get research for
+            
+        Returns:
+            Combined activation + research string, or empty string if not found
+        """
+        logger.info(f"🔄 Loading deep research fresh for model: {model_name}")
         
-        logger.info(
-            f"Deep research loaded for {len(self.deep_research_cache)} models",
-            extra={"models": list(self.deep_research_cache.keys())}
-        )
+        try:
+            research = config_manager.get_deep_research(model_name)
+            
+            if not research["activation"] and not research["research"]:
+                logger.warning(f"No deep research found for {model_name}")
+                return ""
+            
+            combined = research["activation"] + "\n\n" + research["research"]
+            logger.info(f"Deep research loaded fresh for {model_name}: {len(combined)} chars")
+            return combined
+            
+        except Exception as e:
+            logger.error(f"Failed to load deep research for {model_name}: {e}")
+            return ""
     
     async def enhance_single(
         self,
@@ -95,14 +85,22 @@ class PromptEnhancer:
         Raises:
             Exception: If enhancement fails
         """
-        if model_name not in self.deep_research_cache:
-            raise ValueError(f"Deep research not loaded for {model_name}")
+        # ═══════════════════════════════════════════════════════════════
+        # LOAD DEEP RESEARCH FRESH FROM SUPABASE (not cached!)
+        # This ensures prompt changes in UI take effect immediately without redeploy
+        # ═══════════════════════════════════════════════════════════════
+        deep_research = self._get_deep_research_fresh(model_name)
         
-        deep_research = self.deep_research_cache[model_name]
+        if not deep_research:
+            logger.warning(f"No deep research available for {model_name}, proceeding without it")
         
         logger.info(
             f"Enhancing prompt for {model_name}",
-            extra={"model": model_name, "num_images": len(original_images_bytes) if original_images_bytes else 0}
+            extra={
+                "model": model_name, 
+                "num_images": len(original_images_bytes) if original_images_bytes else 0,
+                "deep_research_loaded_fresh": True
+            }
         )
         
         try:

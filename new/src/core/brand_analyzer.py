@@ -24,20 +24,20 @@ class BrandAnalyzer:
             openrouter_client: OpenRouter API client for Claude calls
         """
         self.client = openrouter_client
-        self.prompt_template = self._load_prompt()
+        # NOTE: Prompt is loaded FRESH for each analysis to pick up Supabase changes
     
-    def _load_prompt(self) -> str:
-        """Load brand analyzer prompt via config_manager (Supabase → YAML → File fallback)."""
+    def _get_prompt_fresh(self) -> str:
+        """
+        Load brand analyzer prompt FRESH from Supabase for each task.
+        This ensures prompt changes in UI take effect immediately without redeploy.
+        """
+        logger.info("🔄 Loading brand analyzer prompt fresh from Supabase")
         content = config_manager.get_brand_analyzer_prompt()
         
         if not content or content.startswith("[MISSING PROMPT:"):
             logger.error("Brand analyzer prompt not found in config_manager")
             raise FileNotFoundError("Brand analyzer prompt not found")
         
-        logger.info(
-            "Brand analyzer prompt loaded",
-            extra={"length": len(content), "source": "config_manager"}
-        )
         return content
     
     async def analyze(self, website_url: str) -> Optional[dict]:
@@ -152,13 +152,15 @@ class BrandAnalyzer:
         # (full prompt moved to config/prompts.yaml)"""
         
         # Get brand analyzer user message from config
+        # Load prompts FRESH from Supabase (not cached!)
+        system_prompt = self._get_prompt_fresh()  # P8 - loaded fresh each time
         user_message = config_manager.get_prompt("P9", url=url)
 
         # Build messages
         messages = [
             {
                 "role": "system",
-                "content": self.prompt_template
+                "content": system_prompt
             },
             {
                 "role": "user",
