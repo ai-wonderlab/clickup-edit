@@ -80,6 +80,25 @@ const TAB_COLORS: Record<string, { active: string; inactive: string }> = {
   gray: { active: 'bg-gray-600 text-white', inactive: 'text-gray-600 hover:bg-gray-50' },
 };
 
+// Prompt metadata - where each prompt is used in the pipeline
+const PROMPT_METADATA: Record<string, { usedIn: string; description: string }> = {
+  "P1": { usedIn: "Enhancement Phase", description: "System context for Claude" },
+  "P2": { usedIn: "Enhancement Phase", description: "User template sent to Claude" },
+  "P3": { usedIn: "Enhancement Phase", description: "Multi-image context injection" },
+  "P4": { usedIn: "Validation Phase", description: "System prompt for SIMPLE_EDIT" },
+  "P5": { usedIn: "Validation Phase", description: "System prompt for BRANDED_CREATIVE" },
+  "P6": { usedIn: "Validation Phase", description: "User message - single image" },
+  "P7": { usedIn: "Validation Phase", description: "User message - multi image" },
+  "P8": { usedIn: "Brand Analysis", description: "System prompt for website analysis" },
+  "P9": { usedIn: "Brand Analysis", description: "User message with URL" },
+  "P10": { usedIn: "Generation Phase", description: "Branded creative template" },
+  "P11": { usedIn: "Generation Phase", description: "Dimension adaptation template" },
+  "P14": { usedIn: "Fallback Phase", description: "Human review comment" },
+  "P15": { usedIn: "Enhancement Phase", description: "Model activation context" },
+  "P16": { usedIn: "Enhancement Phase", description: "Model research patterns" },
+  "P17": { usedIn: "Enhancement + Validation", description: "Font translation guide" },
+};
+
 export default function PipelinePage() {
   const [prompts, setPrompts] = useState<Prompt[]>([]);
   const [activeCategory, setActiveCategory] = useState<string>('enhancement');
@@ -259,37 +278,53 @@ export default function PipelinePage() {
             <p className="text-gray-500">No prompts found in category: {activeCategory}</p>
           </div>
         ) : (
-          getPromptsForCategory(activeCategory).map((prompt) => (
-            <div
-              key={prompt.id}
-              onClick={() => handlePromptSelect(prompt)}
-              className="p-5 bg-white border border-gray-200 rounded-lg hover:border-blue-300 hover:shadow-md cursor-pointer transition-all"
-            >
-              <div className="flex items-start justify-between gap-4">
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-3 mb-2">
-                    <span className="font-mono text-sm font-bold px-2 py-1 bg-blue-100 text-blue-700 rounded">
-                      {prompt.prompt_id}
+          getPromptsForCategory(activeCategory).map((prompt) => {
+            const metadata = PROMPT_METADATA[prompt.prompt_id];
+            return (
+              <div
+                key={prompt.id}
+                onClick={() => handlePromptSelect(prompt)}
+                className="p-5 bg-white border border-gray-200 rounded-lg hover:border-blue-300 hover:shadow-md cursor-pointer transition-all"
+              >
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-3 mb-2">
+                      <span className="font-mono text-sm font-bold px-2 py-1 bg-blue-100 text-blue-700 rounded">
+                        {prompt.prompt_id}
+                      </span>
+                      <span className="font-semibold text-gray-900">
+                        {prompt.name}
+                      </span>
+                    </div>
+                    
+                    {/* Metadata: Where used and description */}
+                    {metadata && (
+                      <div className="flex flex-wrap items-center gap-3 mb-2 text-xs">
+                        <span className="inline-flex items-center gap-1 px-2 py-1 bg-amber-50 text-amber-700 rounded-full border border-amber-200">
+                          🔄 Used in: {metadata.usedIn}
+                        </span>
+                        <span className="inline-flex items-center gap-1 text-gray-500">
+                          📝 {metadata.description}
+                        </span>
+                      </div>
+                    )}
+                    
+                    <p className="text-sm text-gray-500 line-clamp-2">
+                      {prompt.content.substring(0, 150)}...
+                    </p>
+                  </div>
+                  <div className="flex flex-col items-end gap-2">
+                    <span className={`text-xs px-2 py-1 rounded border ${CATEGORY_COLORS[activeTab?.color || 'gray']}`}>
+                      {prompt.category}
                     </span>
-                    <span className="font-semibold text-gray-900">
-                      {prompt.name}
+                    <span className="text-xs text-gray-400">
+                      {prompt.content.length.toLocaleString()} chars
                     </span>
                   </div>
-                  <p className="text-sm text-gray-500 line-clamp-3">
-                    {prompt.content.substring(0, 200)}...
-                  </p>
-                </div>
-                <div className="flex flex-col items-end gap-2">
-                  <span className={`text-xs px-2 py-1 rounded border ${CATEGORY_COLORS[activeTab?.color || 'gray']}`}>
-                    {prompt.category}
-                  </span>
-                  <span className="text-xs text-gray-400">
-                    {prompt.content.length.toLocaleString()} chars
-                  </span>
                 </div>
               </div>
-            </div>
-          ))
+            );
+          })
         )}
       </div>
 
