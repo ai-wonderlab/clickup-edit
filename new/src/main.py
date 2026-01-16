@@ -94,10 +94,9 @@ async def lifespan(app: FastAPI):
         # Initialize task parser
         task_parser = TaskParser()
         
-        max_iterations = config.processing.max_iterations if config.processing else 3
-        
         # ============================================================================
         # EXISTING ORCHESTRATOR (KEEP AS FALLBACK)
+        # max_iterations now reads from config_manager (Supabase → YAML → env → default)
         # ============================================================================
         orchestrator = Orchestrator(
             enhancer=enhancer,
@@ -105,8 +104,7 @@ async def lifespan(app: FastAPI):
             validator=validator,
             refiner=refiner,
             hybrid_fallback=hybrid_fallback,
-            max_iterations=max_iterations,
-            config=config,
+            config=config,  # max_iterations will be read from config_manager if not in config
         )
         
         logger.info("Core components initialized")

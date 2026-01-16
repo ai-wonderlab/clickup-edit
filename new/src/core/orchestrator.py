@@ -35,7 +35,7 @@ class Orchestrator:
         validator: Validator,
         refiner: Refiner,
         hybrid_fallback: HybridFallback,
-        max_iterations: int = 3,
+        max_iterations: int = None,  # Now optional, reads from config_manager
         config: Config = None,
     ):
         """
@@ -47,20 +47,27 @@ class Orchestrator:
             validator: Validator instance
             refiner: Refiner instance
             hybrid_fallback: HybridFallback instance
-            max_iterations: Maximum refinement iterations
+            max_iterations: Maximum refinement iterations (optional, reads from Supabase)
         """
         self.enhancer = enhancer
         self.generator = generator
         self.validator = validator
         self.refiner = refiner
         self.hybrid_fallback = hybrid_fallback
-        self.max_iterations = max_iterations
+
+        # Read all parameters from ConfigManager (Supabase → YAML → env → default)
+        if max_iterations is not None:
+            self.max_iterations = max_iterations
+        elif config and config.processing:
+            self.max_iterations = config.processing.max_iterations
+        else:
+            self.max_iterations = config_manager.get_parameter("MAX_ITERATIONS", default=3)
 
         if config:
             self.MAX_STEP_ATTEMPTS = config.max_step_attempts
             self.PASS_THRESHOLD = config.validation_pass_threshold
         else:
-            # Fallback to ConfigManager (or hardcoded defaults)
+            # Fallback to ConfigManager (Supabase → YAML → env → default)
             self.MAX_STEP_ATTEMPTS = config_manager.get_parameter("MAX_STEP_ATTEMPTS", default=2)
             self.PASS_THRESHOLD = config_manager.get_parameter("VALIDATION_PASS_THRESHOLD", default=8)
     

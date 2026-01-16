@@ -9,6 +9,7 @@ from .base import BaseProvider
 from ..utils.logger import get_logger
 from ..utils.errors import ProviderError, AuthenticationError, RateLimitError
 from ..utils.retry import retry_async
+from ..utils.config_manager import config_manager
 
 logger = get_logger(__name__)
 
@@ -17,11 +18,13 @@ class WaveSpeedAIClient(BaseProvider):
     """Client for WaveSpeedAI image editing API."""
     
     def __init__(self, api_key: str, timeout: Optional[float] = None):
-        # ✅ NEW: Use config value if not explicitly provided
+        # Timeout priority: explicit param → Supabase → env config → default
         if timeout is None:
-            from ..utils.config import get_config
-            config = get_config()
-            timeout = config.timeout_wavespeed_seconds
+            timeout = config_manager.get_parameter("TIMEOUT_WAVESPEED_SECONDS", default=None)
+            if timeout is None:
+                from ..utils.config import get_config
+                config = get_config()
+                timeout = config.timeout_wavespeed_seconds
         
         super().__init__(
             api_key=api_key,
