@@ -254,24 +254,37 @@ Do NOT add borders or letterboxing.""",
         """
         Get deep research files for a model.
         
+        Supabase structure (existing):
+        - P15 = Model Activation (nano-banana-pro-edit)
+        - P16 = Model Research (nano-banana-pro-edit)
+        
+        For other models, falls back to files.
+        
         Args:
             model_name: Model name (e.g., 'nano-banana-pro-edit')
             
         Returns:
             Dict with 'activation' and 'research' content
         """
-        activation = self.get_prompt(f"DR_{model_name}_activation")
-        research = self.get_prompt(f"DR_{model_name}_research")
+        activation = ""
+        research = ""
         
-        # Check if we got valid content
-        if activation.startswith("[MISSING PROMPT:"):
-            activation = ""
-        if research.startswith("[MISSING PROMPT:"):
-            research = ""
+        # For nano-banana-pro-edit, use P15/P16 from Supabase
+        if model_name == "nano-banana-pro-edit":
+            activation = self.get_prompt("P15")
+            research = self.get_prompt("P16")
+            
+            # Check if we got valid content from Supabase
+            if not activation.startswith("[MISSING PROMPT:") and not research.startswith("[MISSING PROMPT:"):
+                return {"activation": activation, "research": research}
+        
+        # Fallback to file loading for all models (including if P15/P16 missing)
+        file_activation = self._get_file_fallback(f"DR_{model_name}_activation")
+        file_research = self._get_file_fallback(f"DR_{model_name}_research")
         
         return {
-            "activation": activation,
-            "research": research,
+            "activation": file_activation or "",
+            "research": file_research or "",
         }
     
     def get_brand_analyzer_prompt(self) -> str:
