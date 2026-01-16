@@ -38,6 +38,7 @@ export interface Parameter {
 export interface TaskResult {
   id: string;
   task_id: string;
+  run_id: string | null;  // Unique identifier for this pipeline run
   clickup_task_id: string;
   request: string;
   score: number;
@@ -52,6 +53,7 @@ export interface TaskResult {
 export interface TaskLog {
   id: string;
   task_id: string;
+  run_id: string | null;  // Unique identifier for this pipeline run
   phase: string;
   model_used: string | null;
   iteration: number | null;

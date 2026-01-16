@@ -168,16 +168,24 @@ export default function TaskDetailModal({ result, onClose }: TaskDetailModalProp
     }
 
     try {
-      console.log('[TaskDetail] Fetching logs for:', result.task_id);
-      const { data, error } = await supabase
+      console.log('[TaskDetail] Fetching logs for task:', result.task_id, 'run:', result.run_id);
+      
+      // Build query - filter by run_id if available, otherwise just task_id
+      let query = supabase
         .from('task_logs')
         .select('*')
-        .eq('task_id', result.task_id)
-        .order('created_at', { ascending: true });
+        .eq('task_id', result.task_id);
+      
+      // Filter by run_id if available (for new logs)
+      if (result.run_id) {
+        query = query.eq('run_id', result.run_id);
+      }
+      
+      const { data, error } = await query.order('created_at', { ascending: true });
 
       if (error) throw error;
       
-      console.log('[TaskDetail] Fetched logs:', data?.length || 0);
+      console.log('[TaskDetail] Fetched logs:', data?.length || 0, 'for run_id:', result.run_id);
       setLogs(data || []);
     } catch (err) {
       console.error('[TaskDetail] Error:', err);
@@ -321,6 +329,11 @@ export default function TaskDetailModal({ result, onClose }: TaskDetailModalProp
               ) : (
                 <XCircle className="w-5 h-5 text-red-500 flex-shrink-0" />
               )}
+              {result.run_id && (
+                <span className="font-mono text-xs px-2 py-1 bg-blue-100 text-blue-700 rounded flex-shrink-0">
+                  {result.run_id}
+                </span>
+              )}
               <h2 className="font-semibold text-gray-900 truncate">
                 {result.request}
               </h2>
@@ -449,8 +462,13 @@ export default function TaskDetailModal({ result, onClose }: TaskDetailModalProp
 
         {/* Footer */}
         <div className="p-4 border-t border-gray-200 bg-gray-50">
-          <div className="flex items-center justify-between text-sm text-gray-500">
-            <span>Task ID: {result.task_id}</span>
+          <div className="flex items-center justify-between text-sm text-gray-500 flex-wrap gap-2">
+            {result.run_id && (
+              <span className="font-mono px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs">
+                Run: {result.run_id}
+              </span>
+            )}
+            <span>Task: {result.task_id.substring(0, 8)}...</span>
             <span>ClickUp: {result.clickup_task_id}</span>
             <span>{new Date(result.created_at).toLocaleString()}</span>
           </div>

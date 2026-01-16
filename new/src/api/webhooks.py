@@ -806,6 +806,7 @@ async def process_edit_request(
                 original_image_url=main_url,
                 original_image_bytes=main_bytes,
                 task_type="SIMPLE_EDIT",
+                run_id=run_id,
             )
             
             await _handle_simple_edit_result(result, task_id, clickup)
@@ -984,6 +985,7 @@ async def _process_branded_creative_v2(
                 additional_image_bytes=additional_bytes,
                 context_image_bytes=ctx_bytes,
                 aspect_ratio=dimension,  # ✅ NEW: Pass dimension as aspect ratio to WaveSpeed
+                run_id=run_id,
             )
             
             if result.status == "success":
@@ -1356,6 +1358,7 @@ async def _process_branded_creative(
                 additional_image_bytes=additional_bytes,    # → WaveSpeed only
                 context_image_bytes=context_bytes,          # ✅ NEW: → Claude only
                 aspect_ratio=dimension,                     # ✅ NEW: Pass dimension as aspect ratio to WaveSpeed
+                run_id=run_id,
             )
             
             if result.status == "success":

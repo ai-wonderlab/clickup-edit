@@ -218,6 +218,7 @@ class SupabaseClient:
         passed: bool,
         model_used: str,
         iterations: int,
+        run_id: Optional[str] = None,
         user_feedback: Optional[str] = None,
         user_notes: Optional[str] = None
     ) -> bool:
@@ -228,6 +229,7 @@ class SupabaseClient:
         try:
             self._client.table("task_results").insert({
                 "task_id": task_id,
+                "run_id": run_id,
                 "clickup_task_id": clickup_task_id,
                 "request": request[:1000] if request else None,  # Truncate
                 "score": score,
@@ -248,6 +250,7 @@ class SupabaseClient:
         self,
         task_id: str,
         phase: str,
+        run_id: Optional[str] = None,
         model_used: Optional[str] = None,
         iteration: Optional[int] = None,
         input_data: Optional[Dict] = None,
@@ -263,6 +266,7 @@ class SupabaseClient:
         try:
             self._client.table("task_logs").insert({
                 "task_id": task_id,
+                "run_id": run_id,
                 "phase": phase,
                 "model_used": model_used,
                 "iteration": iteration,

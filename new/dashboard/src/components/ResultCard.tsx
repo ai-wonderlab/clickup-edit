@@ -36,8 +36,15 @@ export default function ResultCard({ result, onClick }: ResultCardProps) {
             )}
           </div>
           <div className="min-w-0 flex-1">
-            <p className="font-medium text-gray-900 truncate">{result.request}</p>
-            <div className="flex items-center gap-3 mt-1 text-sm text-gray-500 flex-wrap">
+            <div className="flex items-center gap-2 mb-1">
+              {result.run_id && (
+                <span className="font-mono text-xs px-2 py-0.5 bg-blue-100 text-blue-700 rounded">
+                  {result.run_id}
+                </span>
+              )}
+              <p className="font-medium text-gray-900 truncate">{result.request}</p>
+            </div>
+            <div className="flex items-center gap-3 text-sm text-gray-500 flex-wrap">
               <span>Score: {result.score}/10</span>
               <span>•</span>
               <span>{result.model_used}</span>

@@ -135,6 +135,7 @@ class Orchestrator:
         additional_image_bytes: List[bytes] = None,   # → WaveSpeed generation
         context_image_bytes: List[bytes] = None,      # ✅ NEW: → Claude enhancement only
         aspect_ratio: str = None,                     # ✅ NEW: Aspect ratio for WaveSpeed
+        run_id: str = None,                           # ✅ Unique ID for this pipeline run
     ) -> ProcessResult:
         """
         Process edit request with iterative refinement.
@@ -149,6 +150,7 @@ class Orchestrator:
             additional_image_bytes: Extra image bytes for WaveSpeed generation
             context_image_bytes: ALL images for Claude enhancement context (includes reference/inspiration)
             aspect_ratio: Aspect ratio for WaveSpeed output (e.g., "16:9", "1:1")
+            run_id: Unique identifier for this pipeline run (for log separation)
             
         Returns:
             ProcessResult with final outcome
@@ -169,6 +171,7 @@ class Orchestrator:
         task_logger.log_phase(
             task_id=task_id,
             phase="start",
+            run_id=run_id,
             input_data={
                 "prompt": prompt[:500] if prompt else None,
                 "image_count": len(context_image_bytes) if context_image_bytes else 1,
@@ -232,6 +235,7 @@ class Orchestrator:
                 task_logger.log_phase(
                     task_id=task_id,
                     phase="enhancement",
+                    run_id=run_id,
                     iteration=iteration,
                     model_used="claude-sonnet-4.5",
                     input_data={
@@ -265,6 +269,7 @@ class Orchestrator:
                 task_logger.log_phase(
                     task_id=task_id,
                     phase="generation",
+                    run_id=run_id,
                     iteration=iteration,
                     model_used=generated[0].model_name if generated else None,
                     output_data={
@@ -293,6 +298,7 @@ class Orchestrator:
                     task_logger.log_phase(
                         task_id=task_id,
                         phase="validation",
+                        run_id=run_id,
                         iteration=iteration,
                         model_used="claude-sonnet-4.5",
                         output_data={
@@ -427,7 +433,8 @@ class Orchestrator:
                         score=best_validation.score if best_validation else 0,
                         passed=True,
                         model_used=best_result.model_name,
-                        iterations=iteration
+                        iterations=iteration,
+                        run_id=run_id
                     )
                     
                     return ProcessResult(
@@ -617,6 +624,7 @@ class Orchestrator:
         task_logger.log_phase(
             task_id=task_id,
             phase="fallback",
+            run_id=run_id,
             output_data={"reason": "max_iterations_exceeded"},
             success=False
         )

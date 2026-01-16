@@ -40,6 +40,7 @@ class TaskLogger:
         self,
         task_id: str,
         phase: str,
+        run_id: Optional[str] = None,
         model_used: Optional[str] = None,
         iteration: Optional[int] = None,
         input_data: Optional[Dict] = None,
@@ -54,6 +55,7 @@ class TaskLogger:
         Args:
             task_id: Unique task identifier
             phase: Phase name (parsing, enhancement, generation, validation, fallback)
+            run_id: Unique identifier for this pipeline run
             model_used: Model name if applicable
             iteration: Iteration number if applicable
             input_data: Input to this phase (will be truncated)
@@ -73,6 +75,7 @@ class TaskLogger:
             supabase_client.log_task_phase(
                 task_id=task_id,
                 phase=phase,
+                run_id=run_id,
                 model_used=model_used,
                 iteration=iteration,
                 input_data=safe_input,
@@ -94,6 +97,7 @@ class TaskLogger:
         passed: bool,
         model_used: str,
         iterations: int,
+        run_id: Optional[str] = None,
         user_feedback: Optional[str] = None
     ) -> None:
         """Log final task result for metrics."""
@@ -106,6 +110,7 @@ class TaskLogger:
                 passed=passed,
                 model_used=model_used,
                 iterations=iterations,
+                run_id=run_id,
                 user_feedback=user_feedback
             )
         except Exception as e:
@@ -116,6 +121,7 @@ class TaskLogger:
         self,
         task_id: str,
         phase: str,
+        run_id: Optional[str] = None,
         model_used: Optional[str] = None,
         iteration: Optional[int] = None,
         input_data: Optional[Dict] = None
@@ -124,7 +130,7 @@ class TaskLogger:
         Context manager for timing phases.
         
         Usage:
-            with task_logger.phase_timer(task_id, "enhancement") as timer:
+            with task_logger.phase_timer(task_id, "enhancement", run_id=run_id) as timer:
                 result = do_enhancement()
                 timer.set_output({"enhanced": result})
         """
@@ -152,6 +158,7 @@ class TaskLogger:
             self.log_phase(
                 task_id=task_id,
                 phase=phase,
+                run_id=run_id,
                 model_used=model_used,
                 iteration=iteration,
                 input_data=input_data,
