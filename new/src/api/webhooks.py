@@ -849,6 +849,8 @@ async def process_edit_request(
                 brand_aesthetic=brand_aesthetic,
                 orchestrator=orchestrator,
                 clickup=clickup,
+                run_id=run_id,
+                task_name=task_name,
             )
         
     except Exception as e:
@@ -928,6 +930,8 @@ async def _process_branded_creative_v2(
     brand_aesthetic: Optional[dict],
     orchestrator,
     clickup,
+    run_id: str = "unknown",
+    task_name: str = "",
 ):
     """
     Process BRANDED_CREATIVE task with dimension loop.
@@ -1171,6 +1175,8 @@ async def _process_branded_creative(
     attachment_urls: dict,
     orchestrator,
     clickup,
+    run_id: str = "unknown",
+    task_name: str = "",
 ):
     """
     Process BRANDED_CREATIVE task with dimension loop.
