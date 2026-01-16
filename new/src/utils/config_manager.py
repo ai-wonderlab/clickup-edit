@@ -95,6 +95,7 @@ class ConfigManager:
         if self._supabase.is_connected:
             content = self._supabase.get_prompt(prompt_id)
             if content:
+                logger.info(f"✅ Loaded {prompt_id} from SUPABASE ({len(content)} chars)")
                 return self._substitute_variables(content, variables)
         
         # Fallback to YAML
@@ -102,11 +103,13 @@ class ConfigManager:
         prompt_data = prompts.get(prompt_id, {})
         content = prompt_data.get("content", "")
         
-        if not content:
-            logger.warning(f"Prompt {prompt_id} not found, using hardcoded fallback")
-            return self._get_hardcoded_fallback(prompt_id, variables)
+        if content:
+            logger.info(f"⚠️ Loaded {prompt_id} from YAML (Supabase fallback) ({len(content)} chars)")
+            return self._substitute_variables(content, variables)
         
-        return self._substitute_variables(content, variables)
+        # Fallback to file/hardcoded
+        logger.warning(f"Prompt {prompt_id} not in Supabase/YAML, trying file/hardcoded fallback")
+        return self._get_hardcoded_fallback(prompt_id, variables)
     
     def get_prompt_info(self, prompt_id: str) -> Optional[Dict]:
         """
@@ -187,10 +190,17 @@ Do NOT add borders or letterboxing.""",
         # Try file fallback for specific prompts
         file_fallback = self._get_file_fallback(prompt_id)
         if file_fallback:
+            logger.info(f"⚠️ Loaded {prompt_id} from FILE (Supabase+YAML fallback) ({len(file_fallback)} chars)")
             return self._substitute_variables(file_fallback, variables)
         
-        content = fallbacks.get(prompt_id, f"[MISSING PROMPT: {prompt_id}]")
-        return self._substitute_variables(content, variables)
+        # Final hardcoded fallback
+        content = fallbacks.get(prompt_id)
+        if content:
+            logger.info(f"⚠️ Loaded {prompt_id} from HARDCODED fallback ({len(content)} chars)")
+            return self._substitute_variables(content, variables)
+        
+        logger.error(f"❌ MISSING PROMPT: {prompt_id} - not found in Supabase, YAML, files, or hardcoded!")
+        return f"[MISSING PROMPT: {prompt_id}]"
     
     def _get_file_fallback(self, prompt_id: str) -> Optional[str]:
         """
@@ -311,23 +321,31 @@ Do NOT add borders or letterboxing.""",
         if self._supabase.is_connected:
             value = self._supabase.get_parameter(key)
             if value is not None:
+                logger.info(f"✅ Loaded param {key}={value} from SUPABASE")
                 return value
         
         # Try YAML
         params = self._config.get("parameters", {})
         param_data = params.get(key, {})
         
-        if not param_data:
-            # Fallback to environment variable
-            env_value = os.getenv(key)
-            if env_value is not None:
-                return self._convert_type(env_value, "auto")
-            return default
+        if param_data:
+            value = param_data.get("value", default)
+            param_type = param_data.get("type", "string")
+            result = self._convert_type(value, param_type)
+            logger.info(f"⚠️ Loaded param {key}={result} from YAML (Supabase fallback)")
+            return result
         
-        value = param_data.get("value", default)
-        param_type = param_data.get("type", "string")
+        # Fallback to environment variable
+        env_value = os.getenv(key)
+        if env_value is not None:
+            result = self._convert_type(env_value, "auto")
+            logger.info(f"⚠️ Loaded param {key}={result} from ENV (Supabase+YAML fallback)")
+            return result
         
-        return self._convert_type(value, param_type)
+        # Return default
+        if default is not None:
+            logger.debug(f"Using default for param {key}={default}")
+        return default
     
     def get_parameter_info(self, key: str) -> Optional[Dict]:
         """
