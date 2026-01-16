@@ -10,3 +10,6 @@ dump.rdb
 node_modules/
 .next/
 .vercel/
+ComfyUI/
+custom_nodes/
+aiwonderlab_pipeline/
