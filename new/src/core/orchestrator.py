@@ -136,6 +136,7 @@ class Orchestrator:
         context_image_bytes: List[bytes] = None,      # ✅ NEW: → Claude enhancement only
         aspect_ratio: str = None,                     # ✅ NEW: Aspect ratio for WaveSpeed
         run_id: str = None,                           # ✅ Unique ID for this pipeline run
+        task_name: str = "",                          # ✅ ClickUp task name for display
     ) -> ProcessResult:
         """
         Process edit request with iterative refinement.
@@ -151,6 +152,7 @@ class Orchestrator:
             context_image_bytes: ALL images for Claude enhancement context (includes reference/inspiration)
             aspect_ratio: Aspect ratio for WaveSpeed output (e.g., "16:9", "1:1")
             run_id: Unique identifier for this pipeline run (for log separation)
+            task_name: ClickUp task name for display in dashboard
             
         Returns:
             ProcessResult with final outcome
@@ -434,7 +436,8 @@ class Orchestrator:
                         passed=True,
                         model_used=best_result.model_name,
                         iterations=iteration,
-                        run_id=run_id
+                        run_id=run_id,
+                        task_name=task_name
                     )
                     
                     return ProcessResult(

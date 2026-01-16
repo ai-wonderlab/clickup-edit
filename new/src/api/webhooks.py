@@ -443,6 +443,10 @@ async def clickup_webhook(
             
             task_data = await clickup.get_task(task_id)
             
+            # Extract task name from ClickUp
+            task_name = task_data.get("name", "")
+            logger.info(f"📋 Task name: {task_name}", extra={"task_id": task_id, "run_id": run_id})
+            
             # � TEMPORARY DEBUG: See raw ClickUp data
             logger.info(f"📝 RAW DESCRIPTION: {task_data.get('description', 'NO DESCRIPTION')}")
             logger.info(f"📝 RAW DESCRIPTION REPR: {repr(task_data.get('description', ''))}")
@@ -587,6 +591,7 @@ async def clickup_webhook(
                 clickup=clickup,
                 brand_analyzer=brand_analyzer,
                 run_id=run_id,
+                task_name=task_name,
             )
             
             logger.info(
@@ -644,6 +649,7 @@ async def process_edit_request(
     clickup,
     brand_analyzer: BrandAnalyzer,
     run_id: str = "unknown",
+    task_name: str = "",
 ):
     """
     Process edit request - simplified with parsed task data.
@@ -807,6 +813,7 @@ async def process_edit_request(
                 original_image_bytes=main_bytes,
                 task_type="SIMPLE_EDIT",
                 run_id=run_id,
+                task_name=task_name,
             )
             
             await _handle_simple_edit_result(result, task_id, clickup)
@@ -986,6 +993,7 @@ async def _process_branded_creative_v2(
                 context_image_bytes=ctx_bytes,
                 aspect_ratio=dimension,  # ✅ NEW: Pass dimension as aspect ratio to WaveSpeed
                 run_id=run_id,
+                task_name=task_name,
             )
             
             if result.status == "success":
@@ -1359,6 +1367,7 @@ async def _process_branded_creative(
                 context_image_bytes=context_bytes,          # ✅ NEW: → Claude only
                 aspect_ratio=dimension,                     # ✅ NEW: Pass dimension as aspect ratio to WaveSpeed
                 run_id=run_id,
+                task_name=task_name,
             )
             
             if result.status == "success":

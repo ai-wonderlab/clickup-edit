@@ -220,7 +220,8 @@ class SupabaseClient:
         iterations: int,
         run_id: Optional[str] = None,
         user_feedback: Optional[str] = None,
-        user_notes: Optional[str] = None
+        user_notes: Optional[str] = None,
+        task_name: Optional[str] = None
     ) -> bool:
         """Log task result for metrics."""
         if not self._client:
@@ -231,6 +232,7 @@ class SupabaseClient:
                 "task_id": task_id,
                 "run_id": run_id,
                 "clickup_task_id": clickup_task_id,
+                "task_name": task_name[:500] if task_name else None,  # Truncate
                 "request": request[:1000] if request else None,  # Truncate
                 "score": score,
                 "passed": passed,

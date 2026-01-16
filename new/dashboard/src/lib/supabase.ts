@@ -40,6 +40,7 @@ export interface TaskResult {
   task_id: string;
   run_id: string | null;  // Unique identifier for this pipeline run
   clickup_task_id: string;
+  task_name: string | null;  // ClickUp task name for display
   request: string;
   score: number;
   passed: boolean;

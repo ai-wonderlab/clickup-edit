@@ -42,8 +42,15 @@ export default function ResultCard({ result, onClick }: ResultCardProps) {
                   {result.run_id}
                 </span>
               )}
-              <p className="font-medium text-gray-900 truncate">{result.request}</p>
+              {/* Show task_name if available, otherwise fallback to prompt */}
+              <p className="font-medium text-gray-900 truncate">
+                {result.task_name || result.request}
+              </p>
             </div>
+            {/* Show prompt as subtitle if task_name exists */}
+            {result.task_name && result.request && (
+              <p className="text-xs text-gray-400 truncate mb-1">{result.request}</p>
+            )}
             <div className="flex items-center gap-3 text-sm text-gray-500 flex-wrap">
               <span>Score: {result.score}/10</span>
               <span>•</span>

@@ -335,9 +335,13 @@ export default function TaskDetailModal({ result, onClose }: TaskDetailModalProp
                 </span>
               )}
               <h2 className="font-semibold text-gray-900 truncate">
-                {result.request}
+                {result.task_name || result.request}
               </h2>
             </div>
+            {/* Show prompt as subtitle if task_name exists */}
+            {result.task_name && result.request && (
+              <p className="text-xs text-gray-400 truncate mb-1 ml-8">{result.request}</p>
+            )}
             <div className="flex items-center gap-4 text-sm text-gray-500">
               <span>Score: {result.score}/10</span>
               <span>•</span>
