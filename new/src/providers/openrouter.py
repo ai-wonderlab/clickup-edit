@@ -28,17 +28,15 @@ class OpenRouterClient(BaseProvider):
         
         Args:
             api_key: OpenRouter API key
-            timeout: Request timeout in seconds (defaults from Supabase/config)
+            timeout: Request timeout in seconds (defaults from config)
         """
-        # Get config for fallback values
+        # Get config
         from ..utils.config import get_config
         config = get_config()
         
-        # Timeout priority: explicit param → Supabase → env config → default
+        # Use config timeout if not provided
         if timeout is None:
-            timeout = config_manager.get_parameter("TIMEOUT_OPENROUTER_SECONDS", default=None)
-            if timeout is None:
-                timeout = config.timeout_openrouter_seconds
+            timeout = config.timeout_openrouter_seconds
         
         super().__init__(
             api_key=api_key,
@@ -46,16 +44,9 @@ class OpenRouterClient(BaseProvider):
             timeout=timeout,
         )
         
-        # Rate limiting: Supabase → env config → default
-        rate_limit_enhancement = config_manager.get_parameter("RATE_LIMIT_ENHANCEMENT", default=None)
-        rate_limit_validation = config_manager.get_parameter("RATE_LIMIT_VALIDATION", default=None)
-        
-        self._enhancement_semaphore = asyncio.Semaphore(
-            rate_limit_enhancement if rate_limit_enhancement else config.rate_limit_enhancement
-        )
-        self._validation_semaphore = asyncio.Semaphore(
-            rate_limit_validation if rate_limit_validation else config.rate_limit_validation
-        )
+        # Rate limiting from config
+        self._enhancement_semaphore = asyncio.Semaphore(config.rate_limit_enhancement)
+        self._validation_semaphore = asyncio.Semaphore(config.rate_limit_validation)
         
         logger.info(
             "OpenRouter rate limiting enabled",
